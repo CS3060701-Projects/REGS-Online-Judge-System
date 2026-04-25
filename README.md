@@ -34,10 +34,7 @@
 ### **2\. 啟動伺服器**
 
 ```Bash
-\# 下載依賴套件  
 go mod download
-
-\# 啟動後端服務 (預設監聽 8081 埠)  
 go run cmd/main.go
 ```
 

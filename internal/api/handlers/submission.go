@@ -91,17 +91,21 @@ func SubmitAssignment(c *gin.Context) {
 }
 
 func processSubmission(operatorID, workspace, problemID string) {
+	fmt.Printf("[評測開始] OperatorID: %s | 題目: %s\n", operatorID, problemID)
+
 	absWorkspace, _ := filepath.Abs(workspace)
 	absTestData, _ := filepath.Abs(filepath.Join("test_data", problemID))
 
 	updateSubmissionStatus(operatorID, "Compiling")
 
+	// 檢查 CMakeLists.txt 是否存在
 	if _, err := os.Stat(filepath.Join(workspace, "CMakeLists.txt")); os.IsNotExist(err) {
+		fmt.Printf("[中斷] 找不到 CMakeLists.txt，判定為 SE\n")
 		updateSubmissionStatus(operatorID, "SE")
 		return
 	}
 
-	// 生成 configure.log 與判定 SE
+	fmt.Println("[執行] 開始 Configure 階段 (cmake -G Ninja -B build)...")
 	configCmd := exec.Command("docker", "run", "--rm",
 		"-v", fmt.Sprintf("%s:/app", absWorkspace),
 		"-w", "/app",
@@ -109,14 +113,15 @@ func processSubmission(operatorID, workspace, problemID string) {
 		"cmake", "-G", "Ninja", "-B", "build",
 	)
 	configOut, err := configCmd.CombinedOutput()
-	os.WriteFile(filepath.Join(workspace, "configure.log"), configOut, 0644) // 寫入日誌
+	os.WriteFile(filepath.Join(workspace, "configure.log"), configOut, 0644)
 
 	if err != nil {
+		fmt.Printf("[失敗] Configure 發生錯誤，判定為 SE (Exit Code 非 0)\n")
 		updateSubmissionStatus(operatorID, "SE")
 		return
 	}
 
-	// 生成 compile.log 與判定 CE
+	fmt.Println("[執行] 開始 Build 階段 (cmake --build build)...")
 	buildCmd := exec.Command("docker", "run", "--rm",
 		"-v", fmt.Sprintf("%s:/app", absWorkspace),
 		"-w", "/app",
@@ -124,18 +129,24 @@ func processSubmission(operatorID, workspace, problemID string) {
 		"cmake", "--build", "build", "--verbose",
 	)
 	buildOut, err := buildCmd.CombinedOutput()
-	os.WriteFile(filepath.Join(workspace, "compile.log"), buildOut, 0644) // 寫入日誌
+	os.WriteFile(filepath.Join(workspace, "compile.log"), buildOut, 0644)
 
 	if err != nil {
+		fmt.Printf("[失敗] Build 發生錯誤，判定為 CE (Exit Code 非 0)\n")
 		updateSubmissionStatus(operatorID, "CE")
 		return
 	}
 
-	// 生成 output.log，判定 AC/WA/TLE/RE
+	fmt.Println("[執行] 編譯成功，進入測資比對階段...")
 	updateSubmissionStatus(operatorID, "Judging")
-	testFiles, _ := os.ReadDir(absTestData)
-	allPassed := true
+	testFiles, err := os.ReadDir(absTestData)
+	if err != nil {
+		fmt.Printf("[錯誤] 無法讀取測資目錄: %s\n", absTestData)
+		updateSubmissionStatus(operatorID, "SE")
+		return
+	}
 
+	allPassed := true
 	outLogFile, _ := os.OpenFile(filepath.Join(workspace, "output.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	defer outLogFile.Close()
 
@@ -150,9 +161,8 @@ func processSubmission(operatorID, workspace, problemID string) {
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-
 			runCmd := exec.CommandContext(ctx, "docker", "run", "--rm", "-i",
-				"--network", "none", // 禁止網路存取
+				"--network", "none",
 				"-v", fmt.Sprintf("%s:/app", absWorkspace),
 				"-w", "/app",
 				"yhlib/cs3060701",
@@ -167,17 +177,18 @@ func processSubmission(operatorID, workspace, problemID string) {
 
 			err := runCmd.Run()
 
-			// 生成output.log
 			outLogFile.WriteString(fmt.Sprintf("=== Test %s ===\n", testName))
 			outLogFile.Write(outBuffer.Bytes())
 			outLogFile.WriteString("\n")
 
 			if ctx.Err() == context.DeadlineExceeded {
+				fmt.Printf("[結果] 測資 %s 執行超時 (TLE)\n", testName)
 				updateSubmissionStatus(operatorID, "TLE")
 				allPassed = false
 				cancel()
 				break
 			} else if err != nil {
+				fmt.Printf("[結果] 測資 %s 執行錯誤 (RE): %v\n", testName, err)
 				updateSubmissionStatus(operatorID, "RE")
 				allPassed = false
 				cancel()
@@ -186,16 +197,20 @@ func processSubmission(operatorID, workspace, problemID string) {
 
 			expectedOut, _ := os.ReadFile(outFile)
 			if strings.TrimSpace(string(expectedOut)) != strings.TrimSpace(outBuffer.String()) {
+				fmt.Printf("[結果] 測資 %s 答案錯誤 (WA)\n", testName)
 				updateSubmissionStatus(operatorID, "WA")
 				allPassed = false
 				cancel()
 				break
 			}
+
+			fmt.Printf("[結果] 測資 %s 通過\n", testName)
 			cancel()
 		}
 	}
 
 	if allPassed {
+		fmt.Printf("[最終結果] OperatorID: %s 全數測資通過 (AC)\n", operatorID)
 		updateSubmissionStatus(operatorID, "AC")
 	}
 }

@@ -23,7 +23,7 @@ type Problem struct {
 }
 
 type Submission struct {
-	OperatorID string `gorm:"primaryKey;type:varchar(50)"` // UUID 或隨機字串
+	OperatorID string `gorm:"primaryKey;type:varchar(50)"`
 	UserID     uint   `gorm:"not null"`
 	ProblemID  uint   `gorm:"not null"`
 	Status     string `gorm:"type:varchar(20);default:'Pending'"` // Pending, AC, WA, CE, SE, RE, TLE

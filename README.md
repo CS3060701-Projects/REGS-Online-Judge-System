@@ -5,12 +5,14 @@
 本專案為 CS3060701 期末專案之後端系統。基於 Go (Gin) 與 PostgreSQL 開發，透過 Docker 實作隔離沙盒，支援 C++ 專案之 CMake 自動化建置與非同步測資比對。
 
 ## **核心功能**
-
 * **非同步任務隊列**：基於 Worker Pool 實作，控制最高併發數以維持系統穩定。  
+
 * **分段自動化編譯**：  
   * Configure 階段：cmake \-G Ninja \-B build (失敗判定 SE)。  
   * Build 階段：cmake \--build build \--verbose (失敗判定 CE)。  
+
 * **沙盒隔離 (Docker)**：採用 yhlib/cs3060701 映像檔，套用 \--network none 斷網，並限制 CPU (1.0)、Memory (256m) 及 PIDs (50)。  
+
 * **判題與日誌**：支援 AC, WA, CE, SE, RE, TLE 狀態判定，並實體化生成 configure.log, compile.log, output.log 供後續查詢。
 
 ## **環境需求**
@@ -18,8 +20,6 @@
 * Go 1.20+  
 * Docker Desktop 或 Docker Engine  
 * PostgreSQL (Port 5433\)
-
-## ---
 
 **環境配置與啟動**
 
@@ -37,9 +37,9 @@ test\_data/
 確認 PostgreSQL 環境設定符合以下連線參數：
 ```
 host=localhost  
-user=regs\_user  
-password=regs\_password  
-dbname=regs\_db  
+user=regs_user  
+password=regs_password  
+dbname=regs_db  
 port=5433
 ```
 
@@ -48,14 +48,14 @@ port=5433
 依序執行以下步驟啟動系統：
 
 1. 啟動 Docker Desktop 應用程式。  
-2. 於專案根目錄啟動資料庫容器：  
+2. 於regs-backend啟動資料庫容器：  
 ```Bash
-   docker-compose up \-d
+   docker-compose up -d
 ```
 
 3. 啟動server.bat
 
-*(伺服器啟動後，終端機將顯示資料庫連線、資料表遷移及 Worker Pool 啟動日誌。)*
+*(伺服器啟動後，Terminal將顯示資料庫連線、資料表遷移及 Worker Pool 啟動日誌。)*
 
 ## ---
 
@@ -63,8 +63,9 @@ port=5433
 
 ### **1\. 準備提交檔案**
 
-建立 C++ 專案，確保根目錄包含以下 CMakeLists.txt。將原始碼與 CMake 設定檔一起壓縮為 submission.zip (請勿包含外層資料夾)。
+將main.cpp與CMakeList.txt一起壓縮為 submission.zip
 
+CMakeLists.txt範例
 ```CMake
 cmake\_minimum\_required(VERSION 3.10)  
 project(Submission)  

@@ -1,75 +1,98 @@
 package judge
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regs-backend/internal/models"
 	"strings"
 	"time"
 )
 
-const TIME_LIMIT = 2 // second
-
-func RunAndJudge(operatorID string, workspace string, problemID string) string {
+func RunAndJudge(operatorID string, workspace string, problem models.Problem) models.JudgeResult {
 	absWorkspace, _ := filepath.Abs(workspace)
-	absWorkspace = filepath.ToSlash(absWorkspace)
+	absTestData, _ := filepath.Abs(filepath.Join("test_data", problem.ID))
 
-	testDataDir := filepath.Join("test_data", problemID)
-	testCases, err := filepath.Glob(filepath.Join(testDataDir, "*.in"))
-
-	if err != nil || len(testCases) == 0 {
-		fmt.Printf("[%s] 錯誤: 找不到題目 %s 的測資\n", operatorID, problemID)
-		return "SE"
+	// 取得所有 .in 檔案
+	testCases, _ := filepath.Glob(filepath.Join(absTestData, "*.in"))
+	if len(testCases) == 0 {
+		return models.JudgeResult{Status: "SE"}
 	}
 
+	var peakTime float64
+	var peakMemory int64
+	outputLogPath := filepath.Join(workspace, "output.log")
+	os.Remove(outputLogPath) // 執行前清空舊日誌
+
+	// 建立或開啟 output.log 用於記錄所有輸出
+	logFile, _ := os.OpenFile(outputLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	defer logFile.Close()
+
 	for _, inputPath := range testCases {
+		testName := strings.TrimSuffix(filepath.Base(inputPath), ".in")
 		expectedPath := strings.TrimSuffix(inputPath, ".in") + ".out"
-		outputLogPath := filepath.Join(workspace, "output.log")
-		os.Remove(outputLogPath)
 
-		outputLog, _ := os.Create(outputLogPath)
-
-		ctx, cancel := context.WithTimeout(context.Background(), TIME_LIMIT*time.Second)
+		// 設定超時限制 (由 Problem 模型提供)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(problem.TimeLimit)*time.Millisecond)
 		defer cancel()
 
 		cmdRun := exec.CommandContext(ctx, "docker", "run", "--rm", "-i",
-			"-v", absWorkspace+":/workspace",
-			"-w", "/workspace",
 			"--network", "none",
-			"yhlib/cs3060701",
-			"./build/main",
+			"--cpus", "1.0",
+			"--memory", fmt.Sprintf("%dm", problem.MemoryLimit),
+			"-v", fmt.Sprintf("%s:/app", absWorkspace),
+			"-w", "/app",
+			models.JUDGER_IMAGE,
+			"/usr/bin/time", "-f", "METRIC:%e:%M", "./build/main",
 		)
 
 		inFile, _ := os.Open(inputPath)
+		var stdoutBuf, stderrBuf bytes.Buffer
 		cmdRun.Stdin = inFile
-		cmdRun.Stdout = outputLog
-		cmdRun.Stderr = outputLog
+		cmdRun.Stdout = &stdoutBuf
+		cmdRun.Stderr = &stderrBuf
 
 		runErr := cmdRun.Run()
 		inFile.Close()
-		outputLog.Close()
 
+		// --- 1. 解析效能數據 ---
+		var currentTime float64
+		var currentMemory int64
+		for _, line := range strings.Split(stderrBuf.String(), "\n") {
+			if strings.Contains(line, "METRIC:") {
+				fmt.Sscanf(strings.TrimSpace(line), "METRIC:%f:%d", &currentTime, &currentMemory)
+			}
+		}
+		if currentTime > peakTime {
+			peakTime = currentTime
+		}
+		if currentMemory > peakMemory {
+			peakMemory = currentMemory
+		}
+
+		// --- 2. 寫入日誌檔案 ---
+		logFile.WriteString(fmt.Sprintf("=== Test %s (%.3fs, %d KB) ===\n", testName, currentTime, currentMemory))
+		logFile.Write(stdoutBuf.Bytes())
+		logFile.WriteString("\n")
+
+		// --- 3. 判定結果 ---
 		if ctx.Err() == context.DeadlineExceeded {
-			return "TLE"
+			return models.JudgeResult{Status: "TLE", PeakTime: peakTime, PeakMemory: peakMemory}
 		}
 		if runErr != nil {
-			return "RE"
+			return models.JudgeResult{Status: "RE", PeakTime: peakTime, PeakMemory: peakMemory}
 		}
 
-		userOut, _ := os.ReadFile(outputLogPath)
 		expectedOut, _ := os.ReadFile(expectedPath)
-
-		if cleanString(string(userOut)) != cleanString(string(expectedOut)) {
-			// 如果 WA，印出 Debug 資訊
-			fmt.Printf("DEBUG [%s]: User[%s] != Expected[%s]\n",
-				operatorID, cleanString(string(userOut)), cleanString(string(expectedOut)))
-			return "WA"
+		if strings.TrimSpace(stdoutBuf.String()) != strings.TrimSpace(string(expectedOut)) {
+			return models.JudgeResult{Status: "WA", PeakTime: peakTime, PeakMemory: peakMemory}
 		}
 	}
 
-	return "AC"
+	return models.JudgeResult{Status: "AC", PeakTime: peakTime, PeakMemory: peakMemory}
 }
 
 func cleanString(s string) string {
@@ -101,7 +124,7 @@ func CompileProject(operatorID string, workspace string) string {
 	cmdConfig := exec.Command("docker", "run", "--rm",
 		"-v", absWorkspace+":/workspace",
 		"-w", "/workspace",
-		"yhlib/cs3060701",
+		models.JUDGER_IMAGE,
 		"cmake", "-G", "Ninja", "-B", "build",
 	)
 
@@ -122,7 +145,7 @@ func CompileProject(operatorID string, workspace string) string {
 	cmdBuild := exec.Command("docker", "run", "--rm",
 		"-v", absWorkspace+":/workspace",
 		"-w", "/workspace",
-		"yhlib/cs3060701",
+		models.JUDGER_IMAGE,
 		"cmake", "--build", "build",
 	)
 

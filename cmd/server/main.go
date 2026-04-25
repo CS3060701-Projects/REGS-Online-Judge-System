@@ -4,7 +4,9 @@ import (
 	"log"
 	"net/http"
 	"regs-backend/internal/api/handlers"
+	"regs-backend/internal/api/middleware"
 	"regs-backend/internal/database"
+	"regs-backend/internal/models"
 	jwtPkg "regs-backend/pkg/jwt"
 
 	"github.com/gin-gonic/gin"
@@ -13,21 +15,56 @@ import (
 func main() {
 	database.Connect()
 
+	err := database.DB.AutoMigrate(&models.Submission{}, &models.User{}, &models.Problem{})
+	if err != nil {
+		log.Fatalf("資料庫遷移失敗: %v", err)
+	}
+
 	if err := jwtPkg.InitKeys(); err != nil {
 		log.Fatal("JWT 初始化失敗:", err)
 	}
 
 	r := gin.Default()
 
-	r.GET("/api/ping", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "pong"})
-	})
-
+	// 初始評測引擎
 	handlers.InitJudger(3)
 
-	r.POST("/api/users/register", handlers.Register)
-	r.POST("/api/users/login", handlers.Login)
-	r.POST("/api/submissions", handlers.SubmitAssignment)
-	r.GET("/api/submissions/:operatorId/status", handlers.GetSubmissionStatus)
+	// API 路由分組
+	api := r.Group("/api")
+	{
+		// 1. Guest 權限 (無需 Token)
+		guest := api.Group("/")
+		guest.Use(middleware.AuthMiddleware("Guest"))
+		{
+			guest.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
+			guest.POST("/users/register", handlers.Register)
+			guest.POST("/users/login", handlers.Login)
+			//guest.GET("/problems", handlers.GetProblems)
+			// 其他 Guest API 如：GET /stats
+		}
+
+		// 2. User 權限 (需 User 或 Admin Token)
+		user := api.Group("/")
+		user.Use(middleware.AuthMiddleware("User"))
+		{
+			user.POST("/submissions", handlers.SubmitAssignment)
+			user.GET("/submissions/:operatorId/status", handlers.GetSubmissionStatus)
+
+			// 關鍵修正：增加讀取日誌的路由
+			user.GET("/submissions/:operatorId/logs/:type", handlers.GetSubmissionLog)
+			user.GET("/submissions", handlers.GetSubmissions)
+		}
+
+		// 3. Admin 權限 (僅限 Admin Token)
+		admin := api.Group("/")
+		admin.Use(middleware.AuthMiddleware("Admin"))
+		{
+			admin.POST("/problems", handlers.CreateProblem)
+			admin.POST("/problems/:id/testdata", handlers.UploadTestData)
+			//admin.DELETE("/problems/:id", handlers.DeleteProblem)
+			// 其他 Admin API 如：PUT /problems, GET /testcases
+		}
+	}
+
 	r.Run(":8081")
 }

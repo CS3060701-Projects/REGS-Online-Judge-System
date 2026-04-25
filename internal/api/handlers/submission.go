@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"bytes"
-	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,26 +8,42 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"regs-backend/internal/database"
+	"regs-backend/internal/judge"
 	"regs-backend/internal/models"
 	"regs-backend/pkg/utils"
 )
 
 func SubmitAssignment(c *gin.Context) {
 	problemID := c.DefaultPostForm("problem_id", "p1001")
-	userIDStr := c.DefaultPostForm("user_id", "0") // 預設使用 2 以符合你的測試
 
-	uID, err := strconv.ParseUint(userIDStr, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id 格式錯誤"})
+	// 🟢 修改 1：從 Token (Context) 中取得可靠的 UserID，絕對不從前端拿
+	val, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授權的操作"})
 		return
 	}
 
+	// 🟢 修改 2：安全的型別轉換 (假設你的 JWT 解析出來是 float64，或是存成 uint)
+	// 這裡依據你 AuthMiddleware 實際存入的型別進行轉換
+	var uID uint
+	switch v := val.(type) {
+	case float64:
+		uID = uint(v)
+	case uint:
+		uID = v
+	case int:
+		uID = uint(v)
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "無法解析使用者 ID"})
+		return
+	}
+
+	// --- 下面的檔案上傳與解壓縮邏輯維持原樣 ---
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "請上傳檔案"})
@@ -60,10 +74,11 @@ func SubmitAssignment(c *gin.Context) {
 		return
 	}
 
+	// 🟢 這裡確保了存入的是 Token 認證過的真實 uID
 	submission := models.Submission{
 		OperatorID: operatorID,
 		ProblemID:  problemID,
-		UserID:     uint(uID),
+		UserID:     uID,
 		Status:     "Pending",
 	}
 
@@ -86,133 +101,60 @@ func SubmitAssignment(c *gin.Context) {
 		"message":    "提交成功，開始評測",
 		"operatorId": operatorID,
 		"problemId":  problemID,
-		"userId":     uint(uID),
+		"userId":     uID, // 回傳給前端確認用
 	})
 }
 
 func processSubmission(operatorID, workspace, problemID string) {
-	fmt.Printf("[評測開始] OperatorID: %s | 題目: %s\n", operatorID, problemID)
+	// 1. 初始化題目與狀態
+	var problem models.Problem
+	if err := database.DB.First(&problem, "id = ?", problemID).Error; err != nil {
+		updateSubmissionStatus(operatorID, "SE")
+		return
+	}
 
 	absWorkspace, _ := filepath.Abs(workspace)
-	absTestData, _ := filepath.Abs(filepath.Join("test_data", problemID))
-
 	updateSubmissionStatus(operatorID, "Compiling")
 
-	// 檢查 CMakeLists.txt 是否存在
-	if _, err := os.Stat(filepath.Join(workspace, "CMakeLists.txt")); os.IsNotExist(err) {
-		fmt.Printf("[中斷] 找不到 CMakeLists.txt，判定為 SE\n")
-		updateSubmissionStatus(operatorID, "SE")
-		return
-	}
-
-	fmt.Println("[執行] 開始 Configure 階段 (cmake -G Ninja -B build)...")
+	// 2. 編譯階段 (Configure)
 	configCmd := exec.Command("docker", "run", "--rm",
-		"-v", fmt.Sprintf("%s:/app", absWorkspace),
-		"-w", "/app",
-		"yhlib/cs3060701",
-		"cmake", "-G", "Ninja", "-B", "build",
+		"-v", absWorkspace+":/app", "-w", "/app",
+		models.JUDGER_IMAGE, "cmake", "-G", "Ninja", "-B", "build",
 	)
-	configOut, err := configCmd.CombinedOutput()
+	configOut, _ := configCmd.CombinedOutput()
 	os.WriteFile(filepath.Join(workspace, "configure.log"), configOut, 0644)
-
-	if err != nil {
-		fmt.Printf("[失敗] Configure 發生錯誤，判定為 SE (Exit Code 非 0)\n")
+	if !configCmd.ProcessState.Success() {
 		updateSubmissionStatus(operatorID, "SE")
 		return
 	}
 
-	fmt.Println("[執行] 開始 Build 階段 (cmake --build build)...")
+	// 3. 編譯階段 (Build)
 	buildCmd := exec.Command("docker", "run", "--rm",
-		"-v", fmt.Sprintf("%s:/app", absWorkspace),
-		"-w", "/app",
-		"yhlib/cs3060701",
-		"cmake", "--build", "build", "--verbose",
+		"-v", absWorkspace+":/app", "-w", "/app",
+		models.JUDGER_IMAGE, "cmake", "--build", "build",
 	)
-	buildOut, err := buildCmd.CombinedOutput()
+	buildOut, _ := buildCmd.CombinedOutput()
 	os.WriteFile(filepath.Join(workspace, "compile.log"), buildOut, 0644)
-
-	if err != nil {
-		fmt.Printf("[失敗] Build 發生錯誤，判定為 CE (Exit Code 非 0)\n")
+	if !buildCmd.ProcessState.Success() {
 		updateSubmissionStatus(operatorID, "CE")
 		return
 	}
 
-	fmt.Println("[執行] 編譯成功，進入測資比對階段...")
+	// 4. 呼叫判題核心 (關鍵修改)
 	updateSubmissionStatus(operatorID, "Judging")
-	testFiles, err := os.ReadDir(absTestData)
-	if err != nil {
-		fmt.Printf("[錯誤] 無法讀取測資目錄: %s\n", absTestData)
-		updateSubmissionStatus(operatorID, "SE")
-		return
-	}
+	result := judge.RunAndJudge(operatorID, workspace, problem)
 
-	allPassed := true
-	outLogFile, _ := os.OpenFile(filepath.Join(workspace, "output.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	defer outLogFile.Close()
+	// 5. 最終結果更新與資料庫寫入
+	updateSubmissionStatus(operatorID, result.Status)
 
-	for _, file := range testFiles {
-		if strings.HasSuffix(file.Name(), ".in") {
-			testName := strings.TrimSuffix(file.Name(), ".in")
-			inFile := filepath.Join(absTestData, file.Name())
-			outFile := filepath.Join(absTestData, testName+".out")
+	database.DB.Model(&models.Submission{}).Where("operator_id = ?", operatorID).
+		Updates(map[string]interface{}{
+			"run_time":   int(result.PeakTime * 1000),
+			"run_memory": result.PeakMemory,
+		})
 
-			if _, err := os.Stat(outFile); os.IsNotExist(err) {
-				continue
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			runCmd := exec.CommandContext(ctx, "docker", "run", "--rm", "-i",
-				"--network", "none",
-				"-v", fmt.Sprintf("%s:/app", absWorkspace),
-				"-w", "/app",
-				"yhlib/cs3060701",
-				"./build/main",
-			)
-
-			inData, _ := os.ReadFile(inFile)
-			runCmd.Stdin = bytes.NewReader(inData)
-
-			var outBuffer bytes.Buffer
-			runCmd.Stdout = &outBuffer
-
-			err := runCmd.Run()
-
-			outLogFile.WriteString(fmt.Sprintf("=== Test %s ===\n", testName))
-			outLogFile.Write(outBuffer.Bytes())
-			outLogFile.WriteString("\n")
-
-			if ctx.Err() == context.DeadlineExceeded {
-				fmt.Printf("[結果] 測資 %s 執行超時 (TLE)\n", testName)
-				updateSubmissionStatus(operatorID, "TLE")
-				allPassed = false
-				cancel()
-				break
-			} else if err != nil {
-				fmt.Printf("[結果] 測資 %s 執行錯誤 (RE): %v\n", testName, err)
-				updateSubmissionStatus(operatorID, "RE")
-				allPassed = false
-				cancel()
-				break
-			}
-
-			expectedOut, _ := os.ReadFile(outFile)
-			if strings.TrimSpace(string(expectedOut)) != strings.TrimSpace(outBuffer.String()) {
-				fmt.Printf("[結果] 測資 %s 答案錯誤 (WA)\n", testName)
-				updateSubmissionStatus(operatorID, "WA")
-				allPassed = false
-				cancel()
-				break
-			}
-
-			fmt.Printf("[結果] 測資 %s 通過\n", testName)
-			cancel()
-		}
-	}
-
-	if allPassed {
-		fmt.Printf("[最終結果] OperatorID: %s 全數測資通過 (AC)\n", operatorID)
-		updateSubmissionStatus(operatorID, "AC")
-	}
+	fmt.Printf("[評測結束] ID: %s | 結果: %s | 峰值耗時: %.3fms | 記憶體: %d KB\n",
+		operatorID, result.Status, result.PeakTime*1000, result.PeakMemory)
 }
 
 func updateSubmissionStatus(operatorID string, status string) {
@@ -238,5 +180,76 @@ func GetSubmissionStatus(c *gin.Context) {
 		"operatorId": submission.OperatorID,
 		"status":     submission.Status,
 		"created_at": submission.CreatedAt,
+		"run_time":   submission.RunTime,   // ms
+		"run_memory": submission.RunMemory, // KB
+	})
+}
+
+func GetSubmissionLog(c *gin.Context) {
+	operatorID := c.Param("operatorId")
+	logType := c.Param("type") // 路徑參數，例如：config, compile, output
+
+	var fileName string
+	switch logType {
+	case "configure":
+		fileName = "configure.log"
+	case "compile":
+		fileName = "compile.log"
+	case "output":
+		fileName = "output.log"
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "無效的日誌類型，僅限 configure, compile, output"})
+		return
+	}
+
+	logPath := filepath.Join("storage", "workspaces", operatorID, fileName)
+
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("找不到指定的日誌檔案: %s", fileName)})
+		return
+	}
+
+	c.File(logPath)
+}
+
+func GetSubmissions(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未經授權的存取"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	var submissions []models.Submission
+	var total int64
+
+	query := database.DB.Model(&models.Submission{}).Where("user_id = ?", userID)
+
+	// 4. 統計該使用者的總提交數
+	query.Count(&total)
+
+	result := query.Preload("Problem").
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&submissions)
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查詢提交紀錄失敗"})
+		return
+	}
+
+	// 6. 回傳結果
+	c.JSON(http.StatusOK, gin.H{
+		"total": total,
+		"page":  page,
+		"limit": limit,
+		"data":  submissions,
 	})
 }

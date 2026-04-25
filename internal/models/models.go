@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 const JUDGER_IMAGE = "regs-judger"
@@ -32,10 +34,10 @@ type Problem struct {
 	TestcasePath string `json:"testcase_path"`
 	IsVisible    bool   `gorm:"default:true" json:"is_visible"`
 
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-
-	Submissions []Submission `gorm:"foreignKey:ProblemID" json:"-"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	Submissions []Submission   `gorm:"foreignKey:ProblemID" json:"-"`
 }
 
 type Submission struct {
@@ -50,4 +52,11 @@ type Submission struct {
 	Problem   Problem `gorm:"foreignKey:ProblemID"`
 	RunTime   int     `json:"run_time"`
 	RunMemory int64   `json:"run_memory"`
+}
+
+type JwtBlacklist struct {
+	ID        uint      `gorm:"primaryKey"`
+	Token     string    `gorm:"type:text;index"` // 儲存整個 Token 字串
+	ExpiresAt time.Time `gorm:"index"`           // Token 原本的過期時間
+	CreatedAt time.Time
 }

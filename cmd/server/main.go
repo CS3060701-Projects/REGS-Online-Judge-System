@@ -15,7 +15,13 @@ import (
 func main() {
 	database.Connect()
 
-	err := database.DB.AutoMigrate(&models.Submission{}, &models.User{}, &models.Problem{})
+	err := database.DB.AutoMigrate(
+		&models.Submission{},
+		&models.User{},
+		&models.Problem{},
+		&models.JwtBlacklist{},
+	)
+
 	if err != nil {
 		log.Fatalf("資料庫遷移失敗: %v", err)
 	}
@@ -47,10 +53,10 @@ func main() {
 		{
 			user.POST("/submissions", handlers.SubmitAssignment)
 			user.GET("/submissions/:operatorId/status", handlers.GetSubmissionStatus)
-
-			// 關鍵修正：增加讀取日誌的路由
+			user.GET("/users/me", handlers.GetMe)
 			user.GET("/submissions/:operatorId/logs/:type", handlers.GetSubmissionLog)
 			user.GET("/submissions", handlers.GetSubmissions)
+			user.POST("/users/logout", handlers.Logout)
 		}
 
 		// Admin

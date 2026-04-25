@@ -21,6 +21,12 @@ import (
 func SubmitAssignment(c *gin.Context) {
 	problemID := c.DefaultPostForm("problem_id", "p1001")
 
+	var problem models.Problem
+	if err := database.DB.Select("id").Where("id = ?", problemID).First(&problem).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "提交失敗：找不到指定的題目"})
+		return
+	}
+
 	// 🟢 修改 1：從 Token (Context) 中取得可靠的 UserID，絕對不從前端拿
 	val, exists := c.Get("user_id")
 	if !exists {
@@ -74,7 +80,6 @@ func SubmitAssignment(c *gin.Context) {
 		return
 	}
 
-	// 🟢 這裡確保了存入的是 Token 認證過的真實 uID
 	submission := models.Submission{
 		OperatorID: operatorID,
 		ProblemID:  problemID,

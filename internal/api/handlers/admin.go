@@ -19,15 +19,36 @@ func CreateProblem(c *gin.Context) {
 		return
 	}
 
-	var count int64
-	database.DB.Model(&models.Problem{}).Where("id = ?", problem.ID).Count(&count)
-	if count > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "題目 ID 已存在"})
-		return
-	}
-
 	if problem.TestcasePath == "" {
 		problem.TestcasePath = filepath.Join("test_data", problem.ID)
+	}
+
+	var existing models.Problem
+	err := database.DB.Unscoped().Where("id = ?", problem.ID).First(&existing).Error
+
+	if err == nil {
+		if existing.DeletedAt.Valid {
+			err := database.DB.Unscoped().Model(&existing).Updates(map[string]interface{}{
+				"deleted_at":    nil,
+				"title":         problem.Title,
+				"description":   problem.Description,
+				"time_limit":    problem.TimeLimit,
+				"memory_limit":  problem.MemoryLimit,
+				"testcase_path": problem.TestcasePath,
+				"is_visible":    problem.IsVisible,
+			}).Error
+
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "復活舊題目失敗"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"message": "已成功覆蓋並重新啟用被刪除的題目", "problem": existing})
+			return
+		} else {
+			c.JSON(http.StatusConflict, gin.H{"error": "題目 ID 已存在且在使用中"})
+			return
+		}
 	}
 
 	if err := database.DB.Create(&problem).Error; err != nil {
@@ -35,10 +56,7 @@ func CreateProblem(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "題目建立成功",
-		"problem": problem,
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "題目建立成功", "problem": problem})
 }
 
 func UploadTestData(c *gin.Context) {
@@ -95,7 +113,6 @@ func DeleteProblem(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "刪除資料庫紀錄失敗"})
 		return
 	}
-
 	testDataDir := problem.TestcasePath
 	if testDataDir == "" {
 		testDataDir = filepath.Join("test_data", problemID)
@@ -106,6 +123,6 @@ func DeleteProblem(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("題目 %s 及其測資已成功刪除", problemID),
+		"message": fmt.Sprintf("題目 %s 已成功刪除，測資檔案已清除", problemID),
 	})
 }

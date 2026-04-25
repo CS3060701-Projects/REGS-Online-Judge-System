@@ -2,69 +2,69 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
-
-	"regs-backend/pkg/jwt"
-
-	jwtlib "github.com/golang-jwt/jwt/v5"
+	"regs-backend/internal/database"
+	"regs-backend/internal/models"
+	jwtPkg "regs-backend/pkg/jwt"
 
 	"github.com/gin-gonic/gin"
 )
 
 func AuthMiddleware(requiredRole string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if requiredRole == "Guest" {
-			c.Next()
-			return
-		}
-
-		// 取得 Authorization Header
 		authHeader := c.GetHeader("Authorization")
+
+		// 🟢 修正邏輯：處理沒帶 Token 的情況
 		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "未提供認證憑證"})
-			return
-		}
-
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		tokenString = strings.TrimSpace(tokenString)
-
-		token, err := jwtlib.Parse(tokenString, func(t *jwtlib.Token) (interface{}, error) {
-			return jwt.VerifyKey, nil
-		})
-
-		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "無效或已過期的 Token"})
-			return
-		}
-
-		claims, ok := token.Claims.(jwtlib.MapClaims)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "無法解析 Token 聲明"})
-			return
-		}
-
-		userRole, _ := claims["role"].(string)
-		userID, _ := claims["user_id"].(float64) // JWT 數字預設解析為 float64
-
-		// admin > user > guest
-		isAuthorized := false
-		switch requiredRole {
-		case "User":
-			if userRole == "User" || userRole == "Admin" {
-				isAuthorized = true
+			// 如果這支 API 允許 Guest 存取，就直接放行
+			if requiredRole == "Guest" {
+				c.Next()
+				return
 			}
-		case "Admin":
-			if userRole == "Admin" {
-				isAuthorized = true
-			}
-		}
-
-		if !isAuthorized {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "權限不足，拒絕存取"})
+			// 如果不是 Guest API 卻沒帶標頭，才擋下來
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未提供認證標頭"})
+			c.Abort()
 			return
 		}
 
-		c.Set("user_id", uint(userID))
+		// --- 以下是「有帶 Token」的情況下才執行的檢查 ---
+
+		// 1. 提取 Token 字串
+		if len(authHeader) < 7 {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "無效的認證格式"})
+			c.Abort()
+			return
+		}
+		tokenString := authHeader[7:]
+
+		// 2. 驗證 Token 合法性
+		claims, err := jwtPkg.ParseToken(tokenString)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "無效的 Token"})
+			c.Abort()
+			return
+		}
+
+		var blacklisted models.JwtBlacklist
+		result := database.DB.Where("token = ?", tokenString).Limit(1).Find(&blacklisted)
+
+		if result.RowsAffected > 0 {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "此 Token 已登出，請重新登入"})
+			c.Abort()
+			return
+		}
+
+		// 4. 權限角色檢查
+		// 如果是 Admin 或是符合要求的 Role，則通過
+		if claims.Role != "Admin" && requiredRole != "Guest" && claims.Role != requiredRole {
+			c.JSON(http.StatusForbidden, gin.H{"error": "權限不足"})
+			c.Abort()
+			return
+		}
+
+		// 5. 設定 Context 資訊
+		c.Set("user_id", claims.UserID)
+		c.Set("role", claims.Role)
+
 		c.Next()
 	}
 }

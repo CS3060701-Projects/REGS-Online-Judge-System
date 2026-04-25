@@ -46,7 +46,6 @@ func GetProblem(c *gin.Context) {
 	problemID := c.Param("id")
 
 	var problem models.Problem
-	// 使用 Select 只撈取 description 欄位，節省記憶體與傳輸時間
 	result := database.DB.Select("description").
 		Where("id = ? AND is_visible = ?", problemID, true).
 		First(&problem)
@@ -56,7 +55,6 @@ func GetProblem(c *gin.Context) {
 		return
 	}
 
-	// 只回傳 description 欄位
 	c.JSON(http.StatusOK, gin.H{
 		"description": problem.Description,
 	})

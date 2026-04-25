@@ -47,6 +47,8 @@ func main() {
 			guest.GET("/problems", handlers.GetProblems)
 			guest.GET("/problems/:id", handlers.GetProblem)
 			guest.GET("/users/:user_id/submissions", handlers.GetUserSubmissions)
+			guest.GET("/stats/problems/:problem_id", handlers.GetProblemStats)
+			guest.GET("/stats/users/:user_id", handlers.GetUserStats)
 		}
 
 		// User
@@ -69,7 +71,6 @@ func main() {
 			admin.POST("/problems", handlers.CreateProblem)
 			admin.POST("/problems/:id/testdata", handlers.UploadTestData)
 			admin.DELETE("/problems/:id", handlers.DeleteProblem)
-			// 其他 Admin API 如：PUT /problems, GET /testcases
 		}
 	}
 

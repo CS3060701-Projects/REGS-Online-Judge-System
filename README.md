@@ -27,8 +27,6 @@
 
 於專案根目錄配置測資結構 (以 p1001 為例)：
 
-Plaintext
-
 test\_data/  
 └── p1001/  
     ├── 1.in  
@@ -37,14 +35,13 @@ test\_data/
 ### **2\. 資料庫配置**
 
 確認 PostgreSQL 環境設定符合以下連線參數：
-
-Plaintext
-
+```
 host=localhost  
 user=regs\_user  
 password=regs\_password  
 dbname=regs\_db  
 port=5433
+```
 
 ### **3\. 系統啟動順序**
 
@@ -52,12 +49,11 @@ port=5433
 
 1. 啟動 Docker Desktop 應用程式。  
 2. 於專案根目錄啟動資料庫容器：  
-   Bash  
+```Bash
    docker-compose up \-d
+```
 
-3. 啟動後端伺服器：  
-   Bash  
-   server.bat
+3. 啟動server.bat
 
 *(伺服器啟動後，終端機將顯示資料庫連線、資料表遷移及 Worker Pool 啟動日誌。)*
 
@@ -69,11 +65,11 @@ port=5433
 
 建立 C++ 專案，確保根目錄包含以下 CMakeLists.txt。將原始碼與 CMake 設定檔一起壓縮為 submission.zip (請勿包含外層資料夾)。
 
-CMake
-
+```CMake
 cmake\_minimum\_required(VERSION 3.10)  
 project(Submission)  
 add\_executable(main main.cpp)
+```
 
 ### **2\. 發送 API 請求**
 

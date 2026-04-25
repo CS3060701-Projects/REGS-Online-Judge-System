@@ -1,0 +1,14 @@
+*.exe
+server
+
+tmp/
+go-build/
+
+storage/
+
+private.pem
+
+pgdata/
+
+.DS_Store
+Thumbs.db

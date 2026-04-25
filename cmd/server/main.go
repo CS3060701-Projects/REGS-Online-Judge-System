@@ -41,22 +41,25 @@ func main() {
 		guest.Use(middleware.AuthMiddleware("Guest"))
 		{
 			guest.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
+
 			guest.POST("/users/register", handlers.Register)
 			guest.POST("/users/login", handlers.Login)
 			guest.GET("/problems", handlers.GetProblems)
 			guest.GET("/problems/:id", handlers.GetProblem)
+			guest.GET("/users/:user_id/submissions", handlers.GetUserSubmissions)
 		}
 
 		// User
 		user := api.Group("/")
 		user.Use(middleware.AuthMiddleware("User"))
 		{
-			user.POST("/submissions", handlers.SubmitAssignment)
-			user.GET("/submissions/:operatorId/status", handlers.GetSubmissionStatus)
-			user.GET("/users/me", handlers.GetMe)
-			user.GET("/submissions/:operatorId/logs/:type", handlers.GetSubmissionLog)
-			user.GET("/submissions", handlers.GetSubmissions)
 			user.POST("/users/logout", handlers.Logout)
+			user.POST("/submissions", handlers.SubmitAssignment)
+			user.GET("/submissions", handlers.GetSubmissions)
+			user.GET("/submissions/:operatorId", handlers.GetSubmissionStatus)
+			user.GET("/submissions/:operatorId/source", handlers.GetSubmissionSource)
+			user.GET("/submissions/:operatorId/logs/:type", handlers.GetSubmissionLog)
+			user.GET("/users/me", handlers.GetMe)
 		}
 
 		// Admin

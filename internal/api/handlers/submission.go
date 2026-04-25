@@ -21,21 +21,21 @@ import (
 func SubmitAssignment(c *gin.Context) {
 	problemID := c.DefaultPostForm("problem_id", "p1001")
 
+	// 1. 檢查題目是否存在
 	var problem models.Problem
 	if err := database.DB.Select("id").Where("id = ?", problemID).First(&problem).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "提交失敗：找不到指定的題目"})
 		return
 	}
 
-	// 🟢 修改 1：從 Token (Context) 中取得可靠的 UserID，絕對不從前端拿
+	// 2. 從 Context 取得 user_id (依照你的要求使用 "user_id")
 	val, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授權的操作"})
 		return
 	}
 
-	// 🟢 修改 2：安全的型別轉換 (假設你的 JWT 解析出來是 float64，或是存成 uint)
-	// 這裡依據你 AuthMiddleware 實際存入的型別進行轉換
+	// 安全的型別轉換
 	var uID uint
 	switch v := val.(type) {
 	case float64:
@@ -49,7 +49,7 @@ func SubmitAssignment(c *gin.Context) {
 		return
 	}
 
-	// --- 下面的檔案上傳與解壓縮邏輯維持原樣 ---
+	// 3. 處理上傳檔案
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "請上傳檔案"})
@@ -61,41 +61,47 @@ func SubmitAssignment(c *gin.Context) {
 		return
 	}
 
+	// 4. 定義路徑邏輯
 	operatorID := uuid.New().String()
+	// 🟢 儲存區：存放原始 zip
+	archiveDir := filepath.Join("storage", "submissions")
+	// 🟢 工作區：存放解壓後的檔案
 	workspace := filepath.Join("storage", "workspaces", operatorID)
 
-	if err := os.MkdirAll(workspace, os.ModePerm); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "無法建立工作空間"})
+	// 確保資料夾都存在
+	if err := os.MkdirAll(archiveDir, os.ModePerm); err != nil || os.MkdirAll(workspace, os.ModePerm) != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "伺服器資料夾建立失敗"})
 		return
 	}
 
-	zipPath := filepath.Join(workspace, "submission.zip")
+	// 5. 執行儲存與解壓縮
+	// 🟢 存檔到 storage/submissions/{operatorID}.zip
+	zipPath := filepath.Join(archiveDir, operatorID+".zip")
 	if err := c.SaveUploadedFile(file, zipPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "檔案儲存失敗"})
 		return
 	}
 
+	// 🟢 從儲存區解壓到工作區
 	if err := utils.Unzip(zipPath, workspace); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "解壓縮失敗，請檢查檔案格式"})
 		return
 	}
 
+	// 6. 建立資料庫紀錄
 	submission := models.Submission{
-		OperatorID: operatorID,
+		OperatorID: operatorID, // 確保你的 Model 欄位名稱正確
 		ProblemID:  problemID,
 		UserID:     uID,
 		Status:     "Pending",
 	}
 
 	if err := database.DB.Create(&submission).Error; err != nil {
-		fmt.Printf("[DB Error] 建立 Submission 失敗: %v\n", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "資料庫紀錄建立失敗",
-			"details": err.Error(),
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "資料庫紀錄建立失敗", "details": err.Error()})
 		return
 	}
 
+	// 7. 派發評測任務
 	JobQueue <- JudgeJob{
 		OperatorID: operatorID,
 		Workspace:  workspace,
@@ -105,8 +111,7 @@ func SubmitAssignment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message":    "提交成功，開始評測",
 		"operatorId": operatorID,
-		"problemId":  problemID,
-		"userId":     uID, // 回傳給前端確認用
+		"userId":     uID,
 	})
 }
 
@@ -257,4 +262,81 @@ func GetSubmissions(c *gin.Context) {
 		"limit": limit,
 		"data":  submissions,
 	})
+}
+
+func GetUserSubmissions(c *gin.Context) {
+	// 1. 從 URL 路徑取得目標 user_id
+	targetUserIDStr := c.Param("user_id")
+
+	// 2. 從 Context 取得目前登入者的資訊 (由 AuthMiddleware 設定)
+	currentUserID, _ := c.Get("user_id")
+	currentRole, _ := c.Get("role")
+
+	// 3. 權限檢查：只有管理員，或是該使用者本人可以查看
+	// 將路徑參數轉換成 uint 進行比較
+	targetUserID, err := strconv.ParseUint(targetUserIDStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "無效的使用者 ID"})
+		return
+	}
+
+	if currentRole != "Admin" && uint(targetUserID) != currentUserID.(uint) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "你沒有權限查看他人的提交紀錄"})
+		return
+	}
+
+	// 4. 查詢資料庫
+	var submissions []models.Submission
+	// 使用 Preload("Problem") 可以連帶把題目資訊（如標題）抓出來，方便前端顯示
+	if err := database.DB.Preload("Problem").
+		Where("user_id = ?", targetUserID).
+		Order("created_at desc"). // 由新到舊排序
+		Find(&submissions).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "無法取得提交紀錄"})
+		return
+	}
+
+	c.JSON(http.StatusOK, submissions)
+}
+
+func GetSubmissionSource(c *gin.Context) {
+	operatorID := c.Param("operatorId")
+
+	// 1. 取得登入者資訊 (處理型別相容性)
+	val, _ := c.Get("user_id")
+	currentRole, _ := c.Get("role")
+
+	var currentUserID uint
+	if v, ok := val.(uint); ok {
+		currentUserID = v
+	} else if f, ok := val.(float64); ok {
+		currentUserID = uint(f)
+	}
+
+	// 2. 查詢提交紀錄
+	var submission models.Submission
+	// 🟢 這裡注意：如果你的 DB 主鍵是 operator_id，請確保查詢條件正確
+	if err := database.DB.Where("operator_id = ?", operatorID).First(&submission).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "找不到該筆提交紀錄"})
+		return
+	}
+
+	// 3. 權限檢查：只有本人或管理員可以存取
+	if currentRole != "Admin" && submission.UserID != currentUserID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "你沒有權限查看此原始碼"})
+		return
+	}
+
+	// 4. 🔴 方案 B 的路徑推算：指向 storage/submissions/{operatorID}.zip
+	filePath := filepath.Join("storage", "submissions", operatorID+".zip")
+
+	// 5. 檢查檔案是否存在
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "原始檔案不存在或已被清理"})
+		return
+	}
+
+	// 6. 回傳檔案
+	downloadName := fmt.Sprintf("submission_%s.zip", operatorID)
+	c.FileAttachment(filePath, downloadName)
 }

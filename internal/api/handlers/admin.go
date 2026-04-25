@@ -20,7 +20,7 @@ func CreateProblem(c *gin.Context) {
 	}
 
 	if problem.TestcasePath == "" {
-		problem.TestcasePath = filepath.Join("test_data", problem.ID)
+		problem.TestcasePath = filepath.Join("testdata", problem.ID)
 	}
 
 	var existing models.Problem
@@ -75,7 +75,7 @@ func UploadTestData(c *gin.Context) {
 	}
 	testDataDir := problem.TestcasePath
 	if testDataDir == "" {
-		testDataDir = filepath.Join("test_data", problemID)
+		testDataDir = filepath.Join("testdata", problemID)
 	}
 
 	os.RemoveAll(testDataDir)
@@ -115,7 +115,7 @@ func DeleteProblem(c *gin.Context) {
 	}
 	testDataDir := problem.TestcasePath
 	if testDataDir == "" {
-		testDataDir = filepath.Join("test_data", problemID)
+		testDataDir = filepath.Join("testdata", problemID)
 	}
 
 	if err := os.RemoveAll(testDataDir); err != nil {

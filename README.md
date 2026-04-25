@@ -33,10 +33,12 @@
 
 ### **2\. 啟動伺服器**
 
+1.啟動 Docker Desktop 應用程式。
+2.於 regs-backend 啟動資料庫容器
 ```Bash
-go mod download
-go run cmd/main.go
+docker-compose up -d
 ```
+3.啟動 Server.bat
 
 ### **3\. 目錄結構準備**
 

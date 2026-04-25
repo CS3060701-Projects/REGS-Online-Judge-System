@@ -75,7 +75,7 @@ func DownloadTestCases(c *gin.Context) {
 		return
 	}
 
-	testDataDir := filepath.Join("test_data", problemID)
+	testDataDir := filepath.Join("testdata", problemID)
 
 	info, err := os.Stat(testDataDir)
 	if os.IsNotExist(err) || !info.IsDir() {

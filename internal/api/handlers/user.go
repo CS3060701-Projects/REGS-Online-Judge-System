@@ -89,7 +89,6 @@ func Login(c *gin.Context) {
 }
 
 func Logout(c *gin.Context) {
-	// 1. 從 Header 取得 Token (格式通常是 "Bearer <token>")
 	authHeader := c.GetHeader("Authorization")
 	if len(authHeader) < 7 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "無效的請求標頭"})
@@ -97,14 +96,12 @@ func Logout(c *gin.Context) {
 	}
 	tokenString := authHeader[7:]
 
-	// 2. 解析 Token 取得 Claims (主要是為了拿 exp 過期時間)
-	claims, err := jwtPkg.ParseToken(tokenString) // 確保有引用你的 jwt 套件
+	claims, err := jwtPkg.ParseToken(tokenString)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "無效的 Token"})
 		return
 	}
 
-	// 3. 將 Token 存入黑名單
 	blacklist := models.JwtBlacklist{
 		Token:     tokenString,
 		ExpiresAt: claims.ExpiresAt.Time,
@@ -132,7 +129,6 @@ func GetMe(c *gin.Context) {
 		First(&user, userID).Error
 
 	if err != nil {
-		// 如果還是出現 record not found，請檢查資料庫內是否真的有 ID 為 userID 的資料
 		c.JSON(http.StatusNotFound, gin.H{"error": "找不到使用者資料", "details": err.Error()})
 		return
 	}

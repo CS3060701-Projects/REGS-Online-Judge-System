@@ -16,7 +16,6 @@ func RunAndJudge(operatorID string, workspace string, problem models.Problem) mo
 	absWorkspace, _ := filepath.Abs(workspace)
 	absTestData, _ := filepath.Abs(filepath.Join("test_data", problem.ID))
 
-	// 取得所有 .in 檔案
 	testCases, _ := filepath.Glob(filepath.Join(absTestData, "*.in"))
 	if len(testCases) == 0 {
 		return models.JudgeResult{Status: "SE"}
@@ -25,9 +24,8 @@ func RunAndJudge(operatorID string, workspace string, problem models.Problem) mo
 	var peakTime float64
 	var peakMemory int64
 	outputLogPath := filepath.Join(workspace, "output.log")
-	os.Remove(outputLogPath) // 執行前清空舊日誌
+	os.Remove(outputLogPath)
 
-	// 建立或開啟 output.log 用於記錄所有輸出
 	logFile, _ := os.OpenFile(outputLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	defer logFile.Close()
 
@@ -35,7 +33,6 @@ func RunAndJudge(operatorID string, workspace string, problem models.Problem) mo
 		testName := strings.TrimSuffix(filepath.Base(inputPath), ".in")
 		expectedPath := strings.TrimSuffix(inputPath, ".in") + ".out"
 
-		// 設定超時限制 (由 Problem 模型提供)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(problem.TimeLimit)*time.Millisecond)
 		defer cancel()
 
@@ -58,7 +55,6 @@ func RunAndJudge(operatorID string, workspace string, problem models.Problem) mo
 		runErr := cmdRun.Run()
 		inFile.Close()
 
-		// --- 1. 解析效能數據 ---
 		var currentTime float64
 		var currentMemory int64
 		for _, line := range strings.Split(stderrBuf.String(), "\n") {
@@ -73,12 +69,10 @@ func RunAndJudge(operatorID string, workspace string, problem models.Problem) mo
 			peakMemory = currentMemory
 		}
 
-		// --- 2. 寫入日誌檔案 ---
 		logFile.WriteString(fmt.Sprintf("=== Test %s (%.3fs, %d KB) ===\n", testName, currentTime, currentMemory))
 		logFile.Write(stdoutBuf.Bytes())
 		logFile.WriteString("\n")
 
-		// --- 3. 判定結果 ---
 		if ctx.Err() == context.DeadlineExceeded {
 			return models.JudgeResult{Status: "TLE", PeakTime: peakTime, PeakMemory: peakMemory}
 		}
@@ -122,6 +116,7 @@ func CompileProject(operatorID string, workspace string) string {
 
 	// cmake -G Ninja -B build
 	cmdConfig := exec.Command("docker", "run", "--rm",
+		"--network", "none",
 		"-v", absWorkspace+":/workspace",
 		"-w", "/workspace",
 		models.JUDGER_IMAGE,
@@ -143,6 +138,7 @@ func CompileProject(operatorID string, workspace string) string {
 
 	// cmake --build build
 	cmdBuild := exec.Command("docker", "run", "--rm",
+		"--network", "none",
 		"-v", absWorkspace+":/workspace",
 		"-w", "/workspace",
 		models.JUDGER_IMAGE,

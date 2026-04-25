@@ -13,22 +13,16 @@ func AuthMiddleware(requiredRole string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 
-		// 🟢 修正邏輯：處理沒帶 Token 的情況
 		if authHeader == "" {
-			// 如果這支 API 允許 Guest 存取，就直接放行
 			if requiredRole == "Guest" {
 				c.Next()
 				return
 			}
-			// 如果不是 Guest API 卻沒帶標頭，才擋下來
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "未提供認證標頭"})
 			c.Abort()
 			return
 		}
 
-		// --- 以下是「有帶 Token」的情況下才執行的檢查 ---
-
-		// 1. 提取 Token 字串
 		if len(authHeader) < 7 {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "無效的認證格式"})
 			c.Abort()
@@ -36,7 +30,6 @@ func AuthMiddleware(requiredRole string) gin.HandlerFunc {
 		}
 		tokenString := authHeader[7:]
 
-		// 2. 驗證 Token 合法性
 		claims, err := jwtPkg.ParseToken(tokenString)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "無效的 Token"})
@@ -53,15 +46,12 @@ func AuthMiddleware(requiredRole string) gin.HandlerFunc {
 			return
 		}
 
-		// 4. 權限角色檢查
-		// 如果是 Admin 或是符合要求的 Role，則通過
 		if claims.Role != "Admin" && requiredRole != "Guest" && claims.Role != requiredRole {
 			c.JSON(http.StatusForbidden, gin.H{"error": "權限不足"})
 			c.Abort()
 			return
 		}
 
-		// 5. 設定 Context 資訊
 		c.Set("user_id", claims.UserID)
 		c.Set("role", claims.Role)
 

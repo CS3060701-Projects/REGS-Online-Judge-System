@@ -56,7 +56,7 @@ type Submission struct {
 
 type JwtBlacklist struct {
 	ID        uint      `gorm:"primaryKey"`
-	Token     string    `gorm:"type:text;index"` // 儲存整個 Token 字串
-	ExpiresAt time.Time `gorm:"index"`           // Token 原本的過期時間
+	Token     string    `gorm:"type:text;index"`
+	ExpiresAt time.Time `gorm:"index"`
 	CreatedAt time.Time
 }

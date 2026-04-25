@@ -81,3 +81,31 @@ func UploadTestData(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("題目 %s 測資上傳並更新完成", problemID)})
 }
+
+func DeleteProblem(c *gin.Context) {
+	problemID := c.Param("id")
+
+	var problem models.Problem
+	if err := database.DB.Where("id = ?", problemID).First(&problem).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "找不到指定題目"})
+		return
+	}
+
+	if err := database.DB.Delete(&problem).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "刪除資料庫紀錄失敗"})
+		return
+	}
+
+	testDataDir := problem.TestcasePath
+	if testDataDir == "" {
+		testDataDir = filepath.Join("test_data", problemID)
+	}
+
+	if err := os.RemoveAll(testDataDir); err != nil {
+		fmt.Printf("[Warning] 測資目錄刪除失敗: %v\n", err)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("題目 %s 及其測資已成功刪除", problemID),
+	})
+}

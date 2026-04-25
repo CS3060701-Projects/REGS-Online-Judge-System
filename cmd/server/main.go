@@ -26,24 +26,22 @@ func main() {
 
 	r := gin.Default()
 
-	// 初始評測引擎
-	handlers.InitJudger(3)
+	handlers.InitJudger(3) // initialize 3 judge workers
 
-	// API 路由分組
 	api := r.Group("/api")
 	{
-		// 1. Guest 權限 (無需 Token)
+		// Guest
 		guest := api.Group("/")
 		guest.Use(middleware.AuthMiddleware("Guest"))
 		{
 			guest.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 			guest.POST("/users/register", handlers.Register)
 			guest.POST("/users/login", handlers.Login)
-			//guest.GET("/problems", handlers.GetProblems)
-			// 其他 Guest API 如：GET /stats
+			guest.GET("/problems", handlers.GetProblems)
+			guest.GET("/problems/:id", handlers.GetProblem)
 		}
 
-		// 2. User 權限 (需 User 或 Admin Token)
+		// User
 		user := api.Group("/")
 		user.Use(middleware.AuthMiddleware("User"))
 		{
@@ -55,13 +53,13 @@ func main() {
 			user.GET("/submissions", handlers.GetSubmissions)
 		}
 
-		// 3. Admin 權限 (僅限 Admin Token)
+		// Admin
 		admin := api.Group("/")
 		admin.Use(middleware.AuthMiddleware("Admin"))
 		{
 			admin.POST("/problems", handlers.CreateProblem)
 			admin.POST("/problems/:id/testdata", handlers.UploadTestData)
-			//admin.DELETE("/problems/:id", handlers.DeleteProblem)
+			admin.DELETE("/problems/:id", handlers.DeleteProblem)
 			// 其他 Admin API 如：PUT /problems, GET /testcases
 		}
 	}

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 )
 
-// Unzip 將 src (zip檔案路徑) 解壓縮到 dest (目標資料夾)
 func Unzip(src string, dest string) error {
 	r, err := zip.OpenReader(src)
 	if err != nil {
@@ -18,13 +17,11 @@ func Unzip(src string, dest string) error {
 	for _, f := range r.File {
 		fpath := filepath.Join(dest, f.Name)
 
-		// 如果是資料夾，建立它
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(fpath, os.ModePerm)
 			continue
 		}
 
-		// 如果是檔案，確保它的上層目錄存在
 		if err = os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
 			return err
 		}

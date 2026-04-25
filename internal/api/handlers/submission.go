@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -78,7 +77,7 @@ func SubmitAssignment(c *gin.Context) {
 	}
 
 	submission := models.Submission{
-		OperatorID: operatorID, // 確保你的 Model 欄位名稱正確
+		OperatorID: operatorID,
 		ProblemID:  problemID,
 		UserID:     uID,
 		Status:     "Pending",
@@ -112,7 +111,14 @@ func processSubmission(operatorID, workspace, problemID string) {
 	absWorkspace, _ := filepath.Abs(workspace)
 	updateSubmissionStatus(operatorID, "Compiling")
 
-	configCmd := exec.Command("docker", "run", "--rm",
+	if _, err := os.Stat(filepath.Join(workspace, "CMakeLists.txt")); os.IsNotExist(err) {
+		updateSubmissionStatus(operatorID, "SE")
+		return
+	}
+
+	configCmd := exec.Command(
+		"docker", "run", "--rm",
+		"--network", "none",
 		"-v", absWorkspace+":/app", "-w", "/app",
 		models.JUDGER_IMAGE, "cmake", "-G", "Ninja", "-B", "build",
 	)
@@ -124,6 +130,7 @@ func processSubmission(operatorID, workspace, problemID string) {
 	}
 
 	buildCmd := exec.Command("docker", "run", "--rm",
+		"--network", "none",
 		"-v", absWorkspace+":/app", "-w", "/app",
 		models.JUDGER_IMAGE, "cmake", "--build", "build",
 	)
@@ -135,6 +142,7 @@ func processSubmission(operatorID, workspace, problemID string) {
 	}
 
 	updateSubmissionStatus(operatorID, "Judging")
+
 	result := judge.RunAndJudge(operatorID, workspace, problem)
 
 	updateSubmissionStatus(operatorID, result.Status)
@@ -145,18 +153,14 @@ func processSubmission(operatorID, workspace, problemID string) {
 			"run_memory": result.PeakMemory,
 		})
 
-	fmt.Printf("[評測結束] ID: %s | 結果: %s | 峰值耗時: %.3fms | 記憶體: %d KB\n",
+	fmt.Printf("[評測結束] ID: %s | 結果: %s | 耗時: %.3fms | 記憶體: %d KB\n",
 		operatorID, result.Status, result.PeakTime*1000, result.PeakMemory)
 }
 
 func updateSubmissionStatus(operatorID string, status string) {
-	err := database.DB.Model(&models.Submission{}).
+	database.DB.Model(&models.Submission{}).
 		Where("operator_id = ?", operatorID).
-		Update("status", status).Error
-
-	if err != nil {
-		fmt.Printf("狀態更新失敗 [%s -> %s]: %v\n", operatorID, status, err)
-	}
+		Update("status", status)
 }
 
 func GetSubmissionStatus(c *gin.Context) {
@@ -172,8 +176,8 @@ func GetSubmissionStatus(c *gin.Context) {
 		"operatorId": submission.OperatorID,
 		"status":     submission.Status,
 		"created_at": submission.CreatedAt,
-		"run_time":   submission.RunTime,   // ms
-		"run_memory": submission.RunMemory, // KB
+		"run_time":   submission.RunTime,
+		"run_memory": submission.RunMemory,
 	})
 }
 
@@ -190,14 +194,14 @@ func GetSubmissionLog(c *gin.Context) {
 	case "output":
 		fileName = "output.log"
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "無效的日誌類型，僅限 configure, compile, output"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "無效的日誌類型"})
 		return
 	}
 
 	logPath := filepath.Join("storage", "workspaces", operatorID, fileName)
 
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("找不到指定的日誌檔案: %s", fileName)})
+		c.JSON(http.StatusNotFound, gin.H{"error": "找不到指定的日誌檔案"})
 		return
 	}
 
@@ -205,66 +209,30 @@ func GetSubmissionLog(c *gin.Context) {
 }
 
 func GetSubmissions(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未經授權的存取"})
-		return
+	val, _ := c.Get("user_id")
+	var currentUID uint
+	if v, ok := val.(uint); ok {
+		currentUID = v
+	} else if f, ok := val.(float64); ok {
+		currentUID = uint(f)
 	}
-
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	if page < 1 {
-		page = 1
-	}
-	offset := (page - 1) * limit
 
 	var submissions []models.Submission
-	var total int64
-
-	query := database.DB.Model(&models.Submission{}).Where("user_id = ?", userID)
-
-	query.Count(&total)
-
-	result := query.Preload("Problem").
+	database.DB.Preload("Problem").
+		Where("user_id = ?", currentUID).
 		Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
 		Find(&submissions)
 
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "查詢提交紀錄失敗"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"total": total,
-		"page":  page,
-		"limit": limit,
-		"data":  submissions,
-	})
+	c.JSON(http.StatusOK, submissions)
 }
 
 func GetUserSubmissions(c *gin.Context) {
-	targetUserIDStr := c.Param("user_id")
-
-	currentUserID, _ := c.Get("user_id")
-	currentRole, _ := c.Get("role")
-
-	targetUserID, err := strconv.ParseUint(targetUserIDStr, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "無效的使用者 ID"})
-		return
-	}
-
-	if currentRole != "Admin" && uint(targetUserID) != currentUserID.(uint) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "你沒有權限查看他人的提交紀錄"})
-		return
-	}
+	targetUserID := c.Param("user_id")
 
 	var submissions []models.Submission
 	if err := database.DB.Preload("Problem").
 		Where("user_id = ?", targetUserID).
-		Order("created_at desc"). // 由新到舊排序
+		Order("created_at DESC").
 		Find(&submissions).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "無法取得提交紀錄"})
 		return
@@ -278,20 +246,20 @@ func GetSubmissionSource(c *gin.Context) {
 	val, _ := c.Get("user_id")
 	currentRole, _ := c.Get("role")
 
-	var currentUserID uint
+	var currentUID uint
 	if v, ok := val.(uint); ok {
-		currentUserID = v
+		currentUID = v
 	} else if f, ok := val.(float64); ok {
-		currentUserID = uint(f)
+		currentUID = uint(f)
 	}
 
 	var submission models.Submission
 	if err := database.DB.Where("operator_id = ?", operatorID).First(&submission).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "找不到該筆提交紀錄"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "找不到提交紀錄"})
 		return
 	}
 
-	if currentRole != "Admin" && submission.UserID != currentUserID {
+	if currentRole != "Admin" && submission.UserID != currentUID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "你沒有權限查看此原始碼"})
 		return
 	}
@@ -299,7 +267,7 @@ func GetSubmissionSource(c *gin.Context) {
 	filePath := filepath.Join("storage", "submissions", operatorID+".zip")
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "原始檔案不存在或已被清理"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "原始檔案不存在"})
 		return
 	}
 

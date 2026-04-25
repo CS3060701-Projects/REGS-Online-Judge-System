@@ -116,6 +116,7 @@ func CompileProject(operatorID string, workspace string) string {
 
 	// cmake -G Ninja -B build
 	cmdConfig := exec.Command("docker", "run", "--rm",
+		"--network", "none",
 		"-v", absWorkspace+":/workspace",
 		"-w", "/workspace",
 		models.JUDGER_IMAGE,
@@ -137,6 +138,7 @@ func CompileProject(operatorID string, workspace string) string {
 
 	// cmake --build build
 	cmdBuild := exec.Command("docker", "run", "--rm",
+		"--network", "none",
 		"-v", absWorkspace+":/workspace",
 		"-w", "/workspace",
 		models.JUDGER_IMAGE,

@@ -68,7 +68,8 @@ func main() {
 		admin := api.Group("/")
 		admin.Use(middleware.AuthMiddleware("Admin"))
 		{
-			admin.POST("/problems", handlers.CreateProblem)
+			admin.PUT("/problems", handlers.CreateProblem)
+			admin.GET("/problems/:id/testcases", handlers.DownloadTestCases)
 			admin.POST("/problems/:id/testdata", handlers.UploadTestData)
 			admin.DELETE("/problems/:id", handlers.DeleteProblem)
 		}

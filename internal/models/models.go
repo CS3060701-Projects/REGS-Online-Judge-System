@@ -14,7 +14,7 @@ type User struct {
 }
 
 type Problem struct {
-	ID           uint   `gorm:"primaryKey"`
+	ID           string `gorm:"primaryKey;type:varchar(50)"`
 	Title        string `gorm:"not null"`
 	Description  string `gorm:"type:text"`
 	TestcasePath string
@@ -25,7 +25,7 @@ type Problem struct {
 type Submission struct {
 	OperatorID string `gorm:"primaryKey;type:varchar(50)"`
 	UserID     uint   `gorm:"not null"`
-	ProblemID  uint   `gorm:"not null"`
+	ProblemID  string `gorm:"not null"`
 	Status     string `gorm:"type:varchar(20);default:'Pending'"` // Pending, AC, WA, CE, SE, RE, TLE
 	CreatedAt  time.Time
 	UpdatedAt  time.Time

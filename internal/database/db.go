@@ -3,6 +3,8 @@ package database
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 
 	"regs-backend/internal/models"
 
@@ -28,4 +30,32 @@ func Connect() {
 		log.Fatal("資料庫遷移失敗:", err)
 	}
 	fmt.Println("資料庫遷移完成!")
+
+	syncProblemsFromFolder("test_data")
+}
+
+func syncProblemsFromFolder(baseDir string) {
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		fmt.Printf("無法讀取題目目錄 '%s' (%v)。請確認資料夾存在。\n", baseDir, err)
+		return
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			problemID := entry.Name()
+
+			problem := models.Problem{
+				ID:           problemID,
+				Title:        "自動匯入: " + problemID,
+				TestcasePath: filepath.Join(baseDir, problemID),
+			}
+
+			DB.FirstOrCreate(&problem, models.Problem{ID: problemID})
+			count++
+		}
+	}
+
+	fmt.Printf("題目初始化完成！共從 '%s' 載入 %d 題。\n", baseDir, count)
 }

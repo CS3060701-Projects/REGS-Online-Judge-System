@@ -1,5 +1,5 @@
 *.exe
-server
+server.bat
 
 tmp/
 go-build/

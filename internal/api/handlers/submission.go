@@ -10,6 +10,9 @@ import (
 
 	"regs-backend/internal/judge"
 
+	"regs-backend/internal/database"
+	"regs-backend/internal/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -50,11 +53,35 @@ func SubmitCode(c *gin.Context) {
 func processSubmission(operatorID string, workspace string) {
 	fmt.Printf("\n[背景任務啟動] OperatorID: %s\n", operatorID)
 
-	status := judge.CompileProject(operatorID, workspace)
+	database.DB.Model(&models.Submission{}).Where("operator_id = ?", operatorID).Update("status", "Judging")
 
+	status := judge.CompileProject(operatorID, workspace)
 	if status == "Ready" {
 		status = judge.RunAndJudge(operatorID, workspace)
 	}
+	err := database.DB.Model(&models.Submission{}).
+		Where("operator_id = ?", operatorID).
+		Update("status", status).Error
 
-	fmt.Printf("[任務結束] 最終評測結果: %s\n", status)
+	if err != nil {
+		fmt.Printf("[錯誤] 更新資料庫狀態失敗: %v\n", err)
+	} else {
+		fmt.Printf("[任務結束] OperatorID: %s, 最終評測結果: %s\n", operatorID, status)
+	}
+}
+
+func GetSubmissionStatus(c *gin.Context) {
+	operatorID := c.Param("operatorId")
+
+	var submission models.Submission
+	if err := database.DB.Where("operator_id = ?", operatorID).First(&submission).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "找不到該筆評測紀錄"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"operatorId": submission.OperatorID,
+		"status":     submission.Status,
+		"created_at": submission.CreatedAt,
+	})
 }

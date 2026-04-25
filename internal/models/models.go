@@ -4,7 +4,6 @@ import (
 	"time"
 )
 
-// 使用者
 type User struct {
 	ID           uint   `gorm:"primaryKey"`
 	Username     string `gorm:"uniqueIndex;not null"`
@@ -14,7 +13,6 @@ type User struct {
 	UpdatedAt    time.Time
 }
 
-// 題目
 type Problem struct {
 	ID           uint   `gorm:"primaryKey"`
 	Title        string `gorm:"not null"`
@@ -24,7 +22,6 @@ type Problem struct {
 	UpdatedAt    time.Time
 }
 
-// 提交紀錄
 type Submission struct {
 	OperatorID string `gorm:"primaryKey;type:varchar(50)"` // UUID 或隨機字串
 	UserID     uint   `gorm:"not null"`
@@ -33,7 +30,6 @@ type Submission struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 
-	// 建立關聯性
 	User    User    `gorm:"foreignKey:UserID"`
 	Problem Problem `gorm:"foreignKey:ProblemID"`
 }

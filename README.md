@@ -11,7 +11,7 @@
   * Configure 階段：cmake \-G Ninja \-B build (失敗判定 SE)。  
   * Build 階段：cmake \--build build \--verbose (失敗判定 CE)。  
 
-* **沙盒隔離 (Docker)**：採用 yhlib/cs3060701 映像檔，套用 \--network none 斷網，並限制 CPU (1.0)、Memory (256m) 及 PIDs (50)。  
+* **沙盒隔離 (Docker)**：採用 JUDGER_IMAGE 映像檔，套用 \--network none 斷網，並限制 CPU (1.0)、Memory (256m) 及 PIDs (50)。  
 
 * **判題與日誌**：支援 AC, WA, CE, SE, RE, TLE 狀態判定，並實體化生成 configure.log, compile.log, output.log 供後續查詢。
 

@@ -14,7 +14,7 @@ import (
 
 func RunAndJudge(operatorID string, workspace string, problem models.Problem) models.JudgeResult {
 	absWorkspace, _ := filepath.Abs(workspace)
-	absTestData, _ := filepath.Abs(filepath.Join("test_data", problem.ID))
+	absTestData, _ := filepath.Abs(filepath.Join("testdata", problem.ID))
 
 	testCases, _ := filepath.Glob(filepath.Join(absTestData, "*.in"))
 	if len(testCases) == 0 {

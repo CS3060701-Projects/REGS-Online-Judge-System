@@ -25,7 +25,6 @@ func Connect() {
 
 	fmt.Println("成功連線到 PostgreSQL!")
 
-	// 執行資料表結構自動遷移
 	err = DB.AutoMigrate(&models.User{}, &models.Problem{}, &models.Submission{})
 	if err != nil {
 		log.Fatal("資料庫遷移失敗:", err)
@@ -49,8 +48,8 @@ func syncProblemsFromFolder(baseDir string) {
 
 			problem := models.Problem{
 				ID:           problemID,
-				Title:        "自動匯入: " + problemID,              // 暫時用 ID 當標題
-				TestcasePath: filepath.Join(baseDir, problemID), // 把測資路徑記錄下來
+				Title:        "自動匯入: " + problemID,
+				TestcasePath: filepath.Join(baseDir, problemID),
 			}
 
 			DB.FirstOrCreate(&problem, models.Problem{ID: problemID})

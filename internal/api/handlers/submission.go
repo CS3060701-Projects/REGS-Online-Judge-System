@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -19,54 +21,45 @@ import (
 )
 
 func SubmitAssignment(c *gin.Context) {
-	// 1. 從 form-data 讀取 problem_id 與 user_id
 	problemID := c.DefaultPostForm("problem_id", "p1001")
-	userIDStr := c.DefaultPostForm("user_id", "2") // 預設使用 2 以符合你的測試
+	userIDStr := c.DefaultPostForm("user_id", "0") // 預設使用 2 以符合你的測試
 
-	// 將 user_id (字串) 轉換為 uint (無號整數)
 	uID, err := strconv.ParseUint(userIDStr, 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id 格式錯誤"})
 		return
 	}
 
-	// 2. 接收上傳的 ZIP 檔案
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "請上傳檔案"})
 		return
 	}
 
-	// 3. 檢查副檔名 (簡單驗證)
 	if !strings.HasSuffix(file.Filename, ".zip") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "只接受 .zip 格式"})
 		return
 	}
 
-	// 4. 生成唯一的 OperatorID (UUID)
 	operatorID := uuid.New().String()
 	workspace := filepath.Join("storage", "workspaces", operatorID)
 
-	// 5. 建立該次評測的獨立工作空間
 	if err := os.MkdirAll(workspace, os.ModePerm); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "無法建立工作空間"})
 		return
 	}
 
-	// 6. 將檔案儲存到本地
 	zipPath := filepath.Join(workspace, "submission.zip")
 	if err := c.SaveUploadedFile(file, zipPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "檔案儲存失敗"})
 		return
 	}
 
-	// 7. 解壓縮 ZIP
 	if err := utils.Unzip(zipPath, workspace); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "解壓縮失敗，請檢查檔案格式"})
 		return
 	}
 
-	// 8. 建立資料庫紀錄 (將 uID 正確寫入)
 	submission := models.Submission{
 		OperatorID: operatorID,
 		ProblemID:  problemID,
@@ -74,7 +67,6 @@ func SubmitAssignment(c *gin.Context) {
 		Status:     "Pending",
 	}
 
-	// 若寫入失敗，回傳詳細的 err.Error() 方便除錯
 	if err := database.DB.Create(&submission).Error; err != nil {
 		fmt.Printf("[DB Error] 建立 Submission 失敗: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -84,10 +76,12 @@ func SubmitAssignment(c *gin.Context) {
 		return
 	}
 
-	// 9. 啟動背景評測任務
-	go processSubmission(operatorID, workspace, problemID)
+	JobQueue <- JudgeJob{
+		OperatorID: operatorID,
+		Workspace:  workspace,
+		ProblemID:  problemID,
+	}
 
-	// 10. 回傳成功訊息給前端/Postman
 	c.JSON(http.StatusOK, gin.H{
 		"message":    "提交成功，開始評測",
 		"operatorId": operatorID,
@@ -97,60 +91,53 @@ func SubmitAssignment(c *gin.Context) {
 }
 
 func processSubmission(operatorID, workspace, problemID string) {
-	fmt.Printf("\n[背景任務啟動] OperatorID: %s, 題目: %s\n", operatorID, problemID)
-
-	// 1. 取得工作空間與測資的絕對路徑 (Docker volume 掛載必須使用絕對路徑)
 	absWorkspace, _ := filepath.Abs(workspace)
 	absTestData, _ := filepath.Abs(filepath.Join("test_data", problemID))
 
-	// 2. 更新狀態為「編譯中」
 	updateSubmissionStatus(operatorID, "Compiling")
 
-	// ==========================================
-	// 階段一：檢查 CMakeLists.txt 是否存在
-	// ==========================================
-	cmakePath := filepath.Join(workspace, "CMakeLists.txt")
-	if _, err := os.Stat(cmakePath); os.IsNotExist(err) {
-		fmt.Printf("[評測中斷] 找不到 CMakeLists.txt\n")
-		updateSubmissionStatus(operatorID, "CE") // Compile Error
+	if _, err := os.Stat(filepath.Join(workspace, "CMakeLists.txt")); os.IsNotExist(err) {
+		updateSubmissionStatus(operatorID, "SE")
 		return
 	}
 
-	// ==========================================
-	// 階段二：透過 Docker 執行 CMake 與 Make
-	// ==========================================
-	// 這裡假設你使用的編譯環境映像檔為 gcc:latest 或 cmake 相關的 image
-	// 指令: cd /app && cmake . && make
-	compileCmd := exec.Command("docker", "run", "--rm",
+	// 生成 configure.log 與判定 SE
+	configCmd := exec.Command("docker", "run", "--rm",
 		"-v", fmt.Sprintf("%s:/app", absWorkspace),
 		"-w", "/app",
-		"yhlib/cs3060701", // ⚠️ 請根據你的 Docker 映像檔名稱進行修改
-		"sh", "-c", "cmake . && make",
+		"yhlib/cs3060701",
+		"cmake", "-G", "Ninja", "-B", "build",
 	)
+	configOut, err := configCmd.CombinedOutput()
+	os.WriteFile(filepath.Join(workspace, "configure.log"), configOut, 0644) // 寫入日誌
 
-	compileOut, err := compileCmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("[編譯失敗] %v\n輸出訊息:\n%s\n", err, string(compileOut))
-		updateSubmissionStatus(operatorID, "CE") // Compile Error
+		updateSubmissionStatus(operatorID, "SE")
 		return
 	}
-	fmt.Println("[編譯成功] 準備進入評測階段")
 
-	// 3. 更新狀態為「評測中」
+	// 生成 compile.log 與判定 CE
+	buildCmd := exec.Command("docker", "run", "--rm",
+		"-v", fmt.Sprintf("%s:/app", absWorkspace),
+		"-w", "/app",
+		"yhlib/cs3060701",
+		"cmake", "--build", "build", "--verbose",
+	)
+	buildOut, err := buildCmd.CombinedOutput()
+	os.WriteFile(filepath.Join(workspace, "compile.log"), buildOut, 0644) // 寫入日誌
+
+	if err != nil {
+		updateSubmissionStatus(operatorID, "CE")
+		return
+	}
+
+	// 生成 output.log，判定 AC/WA/TLE/RE
 	updateSubmissionStatus(operatorID, "Judging")
-
-	// ==========================================
-	// 階段三：執行測資評測 (讀取 .in，比對 .out)
-	// ==========================================
-	// 讀取該題目的測資資料夾
-	testFiles, err := os.ReadDir(absTestData)
-	if err != nil {
-		fmt.Printf("[系統錯誤] 無法讀取測資目錄: %s\n", absTestData)
-		updateSubmissionStatus(operatorID, "SE") // System Error
-		return
-	}
-
+	testFiles, _ := os.ReadDir(absTestData)
 	allPassed := true
+
+	outLogFile, _ := os.OpenFile(filepath.Join(workspace, "output.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	defer outLogFile.Close()
 
 	for _, file := range testFiles {
 		if strings.HasSuffix(file.Name(), ".in") {
@@ -162,52 +149,54 @@ func processSubmission(operatorID, workspace, problemID string) {
 				continue
 			}
 
-			runCmd := exec.Command("docker", "run", "--rm", "-i",
-				"--network", "none",
-				"--memory", "256m",
-				"--cpus", "1.0",
-				"--pids-limit", "50",
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+
+			runCmd := exec.CommandContext(ctx, "docker", "run", "--rm", "-i",
+				"--network", "none", // 禁止網路存取
 				"-v", fmt.Sprintf("%s:/app", absWorkspace),
 				"-w", "/app",
 				"yhlib/cs3060701",
-				"./main",
+				"./build/main",
 			)
 
-			// 讀取測資輸入
 			inData, _ := os.ReadFile(inFile)
 			runCmd.Stdin = bytes.NewReader(inData)
 
 			var outBuffer bytes.Buffer
 			runCmd.Stdout = &outBuffer
 
-			// 執行程式
 			err := runCmd.Run()
-			if err != nil {
-				fmt.Printf("測資 %s 執行錯誤 (RE): %v\n", testName, err)
-				updateSubmissionStatus(operatorID, "RE") // Runtime Error
+
+			// 生成output.log
+			outLogFile.WriteString(fmt.Sprintf("=== Test %s ===\n", testName))
+			outLogFile.Write(outBuffer.Bytes())
+			outLogFile.WriteString("\n")
+
+			if ctx.Err() == context.DeadlineExceeded {
+				updateSubmissionStatus(operatorID, "TLE")
 				allPassed = false
+				cancel()
+				break
+			} else if err != nil {
+				updateSubmissionStatus(operatorID, "RE")
+				allPassed = false
+				cancel()
 				break
 			}
 
-			// 讀取標準答案並進行比對 (去除頭尾空白與換行)
 			expectedOut, _ := os.ReadFile(outFile)
-			expectedStr := strings.TrimSpace(string(expectedOut))
-			actualStr := strings.TrimSpace(outBuffer.String())
-
-			if expectedStr != actualStr {
-				fmt.Printf("測資 %s 答案錯誤 (WA)\n預期: %s\n實際: %s\n", testName, expectedStr, actualStr)
-				updateSubmissionStatus(operatorID, "WA") // Wrong Answer
+			if strings.TrimSpace(string(expectedOut)) != strings.TrimSpace(outBuffer.String()) {
+				updateSubmissionStatus(operatorID, "WA")
 				allPassed = false
+				cancel()
 				break
-			} else {
-				fmt.Printf("測資 %s 通過!\n", testName)
 			}
+			cancel()
 		}
 	}
 
 	if allPassed {
-		fmt.Printf("OperatorID: %s 全數測資通過 (AC)!\n", operatorID)
-		updateSubmissionStatus(operatorID, "AC") // Accepted
+		updateSubmissionStatus(operatorID, "AC")
 	}
 }
 

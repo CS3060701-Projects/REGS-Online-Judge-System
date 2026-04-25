@@ -42,7 +42,6 @@ func RunAndJudge(operatorID string, workspace string, problemID string) string {
 			"./build/main",
 		)
 
-		// 串接測資輸入
 		inFile, _ := os.Open(inputPath)
 		cmdRun.Stdin = inFile
 		cmdRun.Stdout = outputLog
@@ -52,7 +51,6 @@ func RunAndJudge(operatorID string, workspace string, problemID string) string {
 		inFile.Close()
 		outputLog.Close()
 
-		// 判定結果
 		if ctx.Err() == context.DeadlineExceeded {
 			return "TLE"
 		}
@@ -60,7 +58,6 @@ func RunAndJudge(operatorID string, workspace string, problemID string) string {
 			return "RE"
 		}
 
-		// 字串比對 (強化版)
 		userOut, _ := os.ReadFile(outputLogPath)
 		expectedOut, _ := os.ReadFile(expectedPath)
 
@@ -75,7 +72,6 @@ func RunAndJudge(operatorID string, workspace string, problemID string) string {
 	return "AC"
 }
 
-// 輔助函式：清理字串
 func cleanString(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "")
@@ -83,7 +79,6 @@ func cleanString(s string) string {
 }
 
 func CompileProject(operatorID string, workspace string) string {
-	// 1. 取得絕對路徑並轉換為 Docker 友善的正斜線格式
 	absWorkspace, err := filepath.Abs(workspace)
 	if err != nil {
 		fmt.Printf("[%s] 取得絕對路徑失敗: %v\n", operatorID, err)
@@ -91,24 +86,18 @@ func CompileProject(operatorID string, workspace string) string {
 	}
 	absWorkspace = filepath.ToSlash(absWorkspace)
 
-	// 2. [關鍵修復] 強制清理舊的 build 資料夾
-	// 這能確保 Docker 跑的是你「現在」上傳的程式，而不是映像檔內的舊殘留
 	buildPath := filepath.Join(workspace, "build")
 	if err := os.RemoveAll(buildPath); err != nil {
 		fmt.Printf("[%s] 清理舊編譯目錄失敗: %v\n", operatorID, err)
-		// 如果是被 OneDrive 鎖定導致無法刪除，這裡會報錯，建議搬離 OneDrive
 	}
 
 	fmt.Printf("[%s] 開始編譯流程，Workspace: %s\n", operatorID, absWorkspace)
 
-	// ==========================================
-	// 階段一：CMake Configure (產生 Ninja 建置檔)
-	// ==========================================
 	configLogPath := filepath.Join(workspace, "configure.log")
 	configLog, _ := os.Create(configLogPath)
 	defer configLog.Close()
 
-	// 這裡執行 cmake -G Ninja -B build
+	// cmake -G Ninja -B build
 	cmdConfig := exec.Command("docker", "run", "--rm",
 		"-v", absWorkspace+":/workspace",
 		"-w", "/workspace",
@@ -125,14 +114,11 @@ func CompileProject(operatorID string, workspace string) string {
 		return "CE"
 	}
 
-	// ==========================================
-	// 階段二：CMake Build (正式編譯)
-	// ==========================================
 	compileLogPath := filepath.Join(workspace, "compile.log")
 	compileLog, _ := os.Create(compileLogPath)
 	defer compileLog.Close()
 
-	// 這裡執行 cmake --build build
+	// cmake --build build
 	cmdBuild := exec.Command("docker", "run", "--rm",
 		"-v", absWorkspace+":/workspace",
 		"-w", "/workspace",
@@ -145,7 +131,7 @@ func CompileProject(operatorID string, workspace string) string {
 
 	fmt.Printf("[%s] [2/2] 正在執行 CMake Build...\n", operatorID)
 	if err := cmdBuild.Run(); err != nil {
-		fmt.Printf("[%s] Build 失敗 (可能是語法錯誤)，請檢查日誌: %s\n", operatorID, compileLogPath)
+		fmt.Printf("[%s] Build 失敗，請檢查日誌: %s\n", operatorID, compileLogPath)
 		return "CE"
 	}
 

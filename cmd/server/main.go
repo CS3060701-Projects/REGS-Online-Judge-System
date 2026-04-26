@@ -18,6 +18,7 @@ import (
 
 // @title REGS Online Judge API
 // @version 1.0
+// @openapi 3.0.0
 // @description This is the API server for the REGS Online Judge system.
 // @termsOfService http://swagger.io/terms/
 

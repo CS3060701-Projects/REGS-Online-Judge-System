@@ -28,3 +28,11 @@ npm run dev
 ```
 
 若你的系統出現 `npm` 指令不存在，請先修正 Node.js/npm 的 PATH，或重新安裝 Node.js LTS。
+
+## Windows 快速啟動
+
+在 `frontend` 目錄內執行：
+
+```bat
+Start-Frontend.bat
+```

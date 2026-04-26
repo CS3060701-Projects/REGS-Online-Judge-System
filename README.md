@@ -14,7 +14,7 @@ REGS 是一套線上評測系統（Online Judge），包含：
 ```text
 REGS-Backend/
 ├─ backend/            # Go 後端服務
-├─ frontend/           # React 前端服務
+├─ frontend/           # React 前端服務（含 Start-Frontend.bat）
 ├─ Start-All.bat       # 一鍵同時啟動前後端（Windows）
 └─ README.md           # 本文件
 ```
@@ -74,6 +74,16 @@ Start-All.bat
 
 會開兩個視窗分別啟動 backend / frontend。
 
+## 4) 僅啟動前端（Windows）
+
+在 `frontend` 目錄內執行：
+
+```bat
+frontend\Start-Frontend.bat
+```
+
+會開一個新視窗啟動前端。
+
 ---
 
 ## 環境變數
@@ -93,53 +103,6 @@ VITE_API_BASE_URL=http://localhost:8081/api
 - `GET /api/stats/problems/:problem_id`：題目統計
 - `POST /api/users/login`：登入
 - `POST /api/submissions`：提交
-
----
-
-## 部署到 GitHub Pages（重要）
-
-GitHub Pages **只能部署靜態前端**，不能直接部署 Go 後端。
-
-也就是說：
-
-- 前端可以上 GitHub Pages
-- 後端需部署到其他平台（例如 Render / Railway / Fly.io / VPS）
-
-### 前端部署流程（Vite）
-
-1. 將後端先部署到公開網址（例如 `https://your-backend.example.com`）
-2. 在前端部署時設定：
-
-```env
-VITE_API_BASE_URL=https://your-backend.example.com/api
-```
-
-3. build 前端：
-
-```bash
-cd frontend
-npm install
-npm run build
-```
-
-4. 將 `frontend/dist` 發佈到 GitHub Pages（可用 GitHub Actions 或手動發佈）
-
-### React Router 注意
-
-目前前端使用 `BrowserRouter`。在 GitHub Pages 上重新整理子路由（例如 `/problems/p1001`）可能 404。  
-建議擇一處理：
-
-- 改成 `HashRouter`（最簡單，Pages 相容性高）
-- 或加上 GitHub Pages 的 SPA fallback（`404.html` redirect 技術）
-
----
-
-## 建議部署架構（Production）
-
-- Frontend：GitHub Pages
-- Backend API：Render / Railway / VPS
-- Database：Managed PostgreSQL
-- CORS：在 backend 允許前端正式網域
 
 ---
 

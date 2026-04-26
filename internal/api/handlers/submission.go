@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -17,8 +18,25 @@ import (
 	"regs-backend/pkg/utils"
 )
 
+// SubmitAssignment godoc
+// @Summary Submit code for judging
+// @Description Upload a .zip file containing source code for a specific problem.
+// @Tags Submissions
+// @Accept  multipart/form-data
+// @Produce  json
+// @Security ApiKeyAuth
+// @Param   problem_id formData string true "Problem ID (e.g., p1001)"
+// @Param   file formData file true "Source code as a .zip file"
+// @Success 200 {object} object{message=string, operatorId=string, userId=integer} "提交成功，開始評測"
+// @Failure 400 {object} object{error=string} "請求錯誤"
+// @Failure 500 {object} object{error=string} "伺服器內部錯誤"
+// @Router /submissions [post]
 func SubmitAssignment(c *gin.Context) {
-	problemID := c.DefaultPostForm("problem_id", "p1001")
+	problemID := c.PostForm("problem_id")
+	if problemID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "提交失敗：缺少題目 ID (problem_id)"})
+		return
+	}
 
 	var problem models.Problem
 	if err := database.DB.Select("id").Where("id = ?", problemID).First(&problem).Error; err != nil {
@@ -27,21 +45,9 @@ func SubmitAssignment(c *gin.Context) {
 	}
 
 	val, exists := c.Get("user_id")
-	if !exists {
+	uID, ok := val.(uint)
+	if !exists || !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授權的操作"})
-		return
-	}
-
-	var uID uint
-	switch v := val.(type) {
-	case float64:
-		uID = uint(v)
-	case uint:
-		uID = v
-	case int:
-		uID = uint(v)
-	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "無法解析使用者 ID"})
 		return
 	}
 
@@ -163,6 +169,16 @@ func updateSubmissionStatus(operatorID string, status string) {
 		Update("status", status)
 }
 
+// GetSubmissionStatus godoc
+// @Summary Get submission status
+// @Description Retrieves the current status and result of a specific submission.
+// @Tags Submissions
+// @Produce  json
+// @Security ApiKeyAuth
+// @Param   operatorId path string true "Operator ID of the submission"
+// @Success 200 {object} object{operatorId=string, status=string, created_at=string, run_time=integer, run_memory=integer}
+// @Failure 404 {object} object{error=string} "找不到該筆評測紀錄"
+// @Router /submissions/{operatorId} [get]
 func GetSubmissionStatus(c *gin.Context) {
 	operatorID := c.Param("operatorId")
 
@@ -181,6 +197,18 @@ func GetSubmissionStatus(c *gin.Context) {
 	})
 }
 
+// GetSubmissionLog godoc
+// @Summary Get submission log file
+// @Description Downloads a specific log file (configure, compile, or output) for a submission.
+// @Tags Submissions
+// @Produce  plain
+// @Security ApiKeyAuth
+// @Param   operatorId path string true "Operator ID of the submission"
+// @Param   type path string true "Log type" Enums(configure, compile, output)
+// @Success 200 {file} file "Log file content"
+// @Failure 400 {object} object{error=string} "無效的日誌類型"
+// @Failure 404 {object} object{error=string} "找不到指定的日誌檔案"
+// @Router /submissions/{operatorId}/logs/{type} [get]
 func GetSubmissionLog(c *gin.Context) {
 	operatorID := c.Param("operatorId")
 	logType := c.Param("type")
@@ -208,32 +236,59 @@ func GetSubmissionLog(c *gin.Context) {
 	c.File(logPath)
 }
 
+func getSubmissionsByUserID(userID string) ([]models.Submission, error) {
+	var submissions []models.Submission
+	err := database.DB.Preload("Problem").
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Find(&submissions).Error
+	return submissions, err
+}
+
+// GetSubmissions godoc
+// @Summary Get personal submission history
+// @Description Retrieves a list of all submissions made by the currently authenticated user.
+// @Tags Submissions
+// @Produce  json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.Submission
+// @Failure 401 {object} object{error=string} "未授權的操作"
+// @Failure 500 {object} object{error=string} "無法取得提交紀錄"
+// @Router /submissions [get]
 func GetSubmissions(c *gin.Context) {
-	val, _ := c.Get("user_id")
-	var currentUID uint
-	if v, ok := val.(uint); ok {
-		currentUID = v
-	} else if f, ok := val.(float64); ok {
-		currentUID = uint(f)
+	val, exists := c.Get("user_id")
+	currentUID, ok := val.(uint)
+	if !exists || !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授權的操作"})
+		return
 	}
 
-	var submissions []models.Submission
-	database.DB.Preload("Problem").
-		Where("user_id = ?", currentUID).
-		Order("created_at DESC").
-		Find(&submissions)
-
+	submissions, err := getSubmissionsByUserID(fmt.Sprint(currentUID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "無法取得提交紀錄"})
+		return
+	}
 	c.JSON(http.StatusOK, submissions)
 }
 
+// GetUserSubmissions godoc
+// @Summary Get a specific user's submission history
+// @Description Retrieves a list of all submissions made by a specific user.
+// @Tags Submissions
+// @Produce  json
+// @Param   user_id path integer true "User ID"
+// @Success 200 {array} models.Submission
+// @Router /users/{user_id}/submissions [get]
 func GetUserSubmissions(c *gin.Context) {
 	targetUserID := c.Param("user_id")
 
-	var submissions []models.Submission
-	if err := database.DB.Preload("Problem").
-		Where("user_id = ?", targetUserID).
-		Order("created_at DESC").
-		Find(&submissions).Error; err != nil {
+	if _, err := strconv.Atoi(targetUserID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "無效的使用者 ID"})
+		return
+	}
+
+	submissions, err := getSubmissionsByUserID(targetUserID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "無法取得提交紀錄"})
 		return
 	}
@@ -241,16 +296,24 @@ func GetUserSubmissions(c *gin.Context) {
 	c.JSON(http.StatusOK, submissions)
 }
 
+// GetSubmissionSource godoc
+// @Summary Download submission source code
+// @Description Downloads the original .zip file for a submission. Only accessible by the owner or an admin.
+// @Tags Submissions
+// @Produce  application/zip
+// @Security ApiKeyAuth
+// @Param   operatorId path string true "Operator ID of the submission"
+// @Success 200 {file} file "The submission's source code as a .zip file"
+// @Router /submissions/{operatorId}/source [get]
 func GetSubmissionSource(c *gin.Context) {
 	operatorID := c.Param("operatorId")
 	val, _ := c.Get("user_id")
 	currentRole, _ := c.Get("role")
 
-	var currentUID uint
-	if v, ok := val.(uint); ok {
-		currentUID = v
-	} else if f, ok := val.(float64); ok {
-		currentUID = uint(f)
+	currentUID, ok := val.(uint)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授權的操作"})
+		return
 	}
 
 	var submission models.Submission

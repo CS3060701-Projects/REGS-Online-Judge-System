@@ -23,6 +23,14 @@ type UserStatsResponse struct {
 	StatusDist       map[string]int `json:"status_distribution"`
 }
 
+// GetProblemStats godoc
+// @Summary Get statistics for a problem
+// @Description Retrieves submission statistics for a specific problem, including total submissions, AC count, and status distribution.
+// @Tags Statistics
+// @Produce  json
+// @Param   problem_id path string true "Problem ID"
+// @Success 200 {object} ProblemStatsResponse
+// @Router /stats/problems/{problem_id} [get]
 func GetProblemStats(c *gin.Context) {
 	problemID := c.Param("problem_id")
 
@@ -57,6 +65,14 @@ func GetProblemStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
+// GetUserStats godoc
+// @Summary Get statistics for a user
+// @Description Retrieves submission statistics for a specific user, including total submissions, solved count, and status distribution.
+// @Tags Statistics
+// @Produce  json
+// @Param   user_id path integer true "User ID"
+// @Success 200 {object} UserStatsResponse
+// @Router /stats/users/{user_id} [get]
 func GetUserStats(c *gin.Context) {
 	targetUserID := c.Param("user_id")
 
@@ -74,13 +90,9 @@ func GetUserStats(c *gin.Context) {
 		Group("status").
 		Scan(&results)
 
-	var totalAC int64
 	for _, r := range results {
 		stats.StatusDist[r.Status] = r.Count
 		stats.TotalSubmissions += int64(r.Count)
-		if r.Status == "AC" {
-			totalAC = int64(r.Count)
-		}
 	}
 
 	database.DB.Model(&models.Submission{}).
@@ -89,7 +101,7 @@ func GetUserStats(c *gin.Context) {
 		Count(&stats.SolvedCount)
 
 	if stats.TotalSubmissions > 0 {
-		rate := (float64(totalAC) / float64(stats.TotalSubmissions)) * 100
+		rate := (float64(stats.StatusDist["AC"]) / float64(stats.TotalSubmissions)) * 100
 		stats.AcceptanceRate = math.Round(rate*100) / 100
 	}
 

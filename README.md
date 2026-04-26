@@ -1,4 +1,4 @@
-# REGS Fullstack Project
+# Remote-Evaluation-and-Grading-System
 
 REGS 是一套線上評測系統（Online Judge），包含：
 

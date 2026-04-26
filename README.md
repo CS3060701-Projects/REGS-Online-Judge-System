@@ -2,7 +2,7 @@
 
 REGS 是一套線上評測系統（Online Judge），包含：
 
-- `backend`：Go + Gin + PostgreSQL + Docker sandbox 判題服務
+- `backend`：Go + Gin + PostgreSQL + Docker sandbox 程式測試
 - `frontend`：React + TypeScript + Vite 使用者介面
 
 此專案目前為「前後端分離」架構：前端呼叫後端 API 進行認證、題目查詢、提交與評測結果查詢。
@@ -56,13 +56,16 @@ REGS-Backend/
 
 ## 2) 啟動前端
 
-```bash
-cd frontend
-npm install
-npm run dev
+在 `frontend` 目錄內執行：
+
+```bat
+start_frontend.bat
 ```
 
+會開一個新視窗啟動前端。
+
 前端開發網址：`http://localhost:5173`
+
 
 ## 3) 一鍵同時啟動（Windows）
 
@@ -73,17 +76,6 @@ Start-All.bat
 ```
 
 會開兩個視窗分別啟動 backend / frontend。
-
-## 4) 僅啟動前端（Windows）
-
-在 `frontend` 目錄內執行：
-
-```bat
-frontend\Start-Frontend.bat
-```
-
-會開一個新視窗啟動前端。
-
 ---
 
 ## 環境變數

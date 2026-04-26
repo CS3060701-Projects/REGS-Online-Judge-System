@@ -34,5 +34,5 @@ npm run dev
 在 `frontend` 目錄內執行：
 
 ```bat
-Start-Frontend.bat
+start_frontend.bat
 ```

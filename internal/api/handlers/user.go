@@ -15,6 +15,18 @@ type AuthRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// Register godoc
+// @Summary Register a new user
+// @Description Creates a new user account. The first user registered will be an admin.
+// @Tags Users
+// @Accept  json
+// @Produce  json
+// @Param   user body AuthRequest true "User Registration Info"
+// @Success 201 {object} object{message=string, user_id=integer, role=string} "註冊成功"
+// @Failure 400 {object} object{error=string} "格式錯誤"
+// @Failure 409 {object} object{error=string} "使用者名稱已被註冊"
+// @Failure 500 {object} object{error=string} "伺服器內部錯誤"
+// @Router /users/register [post]
 func Register(c *gin.Context) {
 	var req AuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -35,17 +47,10 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	role := "User"
-	var totalUsers int64
-	database.DB.Model(&models.User{}).Count(&totalUsers)
-	if totalUsers == 0 {
-		role = "Admin"
-	}
-
 	newUser := models.User{
 		Username:     req.Username,
 		PasswordHash: string(hashedPassword),
-		Role:         role,
+		Role:         "User",
 	}
 
 	if err := database.DB.Create(&newUser).Error; err != nil {
@@ -56,6 +61,18 @@ func Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": "註冊成功", "user_id": newUser.ID, "role": newUser.Role})
 }
 
+// Login godoc
+// @Summary Log in a user
+// @Description Authenticates a user and returns a JWT token.
+// @Tags Users
+// @Accept  json
+// @Produce  json
+// @Param   credentials body AuthRequest true "User Login Credentials"
+// @Success 200 {object} object{message=string, token=string, role=string} "登入成功"
+// @Failure 400 {object} object{error=string} "格式錯誤"
+// @Failure 401 {object} object{error=string} "帳號或密碼錯誤"
+// @Failure 500 {object} object{error=string} "Token 生成失敗"
+// @Router /users/login [post]
 func Login(c *gin.Context) {
 	var req AuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -88,6 +105,16 @@ func Login(c *gin.Context) {
 	})
 }
 
+// Logout godoc
+// @Summary Log out the current user
+// @Description Invalidates the current user's JWT by adding it to a blacklist.
+// @Tags Users
+// @Security Bearer
+// @Success 200 {object} object{message=string} "登出成功"
+// @Failure 400 {object} object{error=string} "無效的請求標頭"
+// @Failure 401 {object} object{error=string} "無效的 Token"
+// @Failure 500 {object} object{error=string} "登出操作失敗"
+// @Router /users/logout [post]
 func Logout(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	if len(authHeader) < 7 {
@@ -115,14 +142,23 @@ func Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "登出成功"})
 }
 
+// GetMe godoc
+// @Summary Get current user's profile
+// @Description Retrieves the profile information of the currently authenticated user.
+// @Tags Users
+// @Produce  json
+// @Security Bearer
+// @Success 200 {object} models.User
+// @Failure 401 {object} object{error=string} "未授權的操作"
+// @Failure 404 {object} object{error=string} "找不到使用者資料"
+// @Router /users/me [get]
 func GetMe(c *gin.Context) {
 	val, exists := c.Get("user_id")
-	if !exists {
+	userID, ok := val.(uint)
+	if !exists || !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授權的操作"})
 		return
 	}
-
-	userID := val.(uint)
 
 	var user models.User
 	err := database.DB.Select("id", "username", "role", "created_at").

@@ -31,7 +31,7 @@ func Connect() {
 	}
 	fmt.Println("資料庫遷移完成!")
 
-	syncProblemsFromFolder("test_data")
+	syncProblemsFromFolder("testdata")
 }
 
 func syncProblemsFromFolder(baseDir string) {

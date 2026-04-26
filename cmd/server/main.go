@@ -9,9 +9,30 @@ import (
 	"regs-backend/internal/models"
 	jwtPkg "regs-backend/pkg/jwt"
 
+	_ "regs-backend/docs"
+
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+// @title REGS Online Judge API
+// @version 1.0
+// @openapi 3.0.0
+// @description This is the API server for the REGS Online Judge system.
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.url https://github.com/your-repo
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:8081
+// @BasePath /api
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
 func main() {
 	database.Connect()
 
@@ -30,48 +51,46 @@ func main() {
 		log.Fatal("JWT 初始化失敗:", err)
 	}
 
+	handlers.InitJudger(3) // initialize 3 judge workers
+
 	r := gin.Default()
 
-	handlers.InitJudger(3) // initialize 3 judge workers
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	api := r.Group("/api")
 	{
-		// Guest
-		guest := api.Group("/")
-		guest.Use(middleware.AuthMiddleware("Guest"))
-		{
-			guest.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
+		// Public routes (no auth required)
+		api.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
+		api.POST("/users/register", handlers.Register)
+		api.POST("/users/login", handlers.Login)
+		api.GET("/problems", handlers.GetProblems)
+		api.GET("/problems/:id", handlers.GetProblem)
+		api.GET("/users/:user_id/submissions", handlers.GetUserSubmissions)
+		api.GET("/stats/problems/:problem_id", handlers.GetProblemStats)
+		api.GET("/stats/users/:user_id", handlers.GetUserStats)
 
-			guest.POST("/users/register", handlers.Register)
-			guest.POST("/users/login", handlers.Login)
-			guest.GET("/problems", handlers.GetProblems)
-			guest.GET("/problems/:id", handlers.GetProblem)
-			guest.GET("/users/:user_id/submissions", handlers.GetUserSubmissions)
-			guest.GET("/stats/problems/:problem_id", handlers.GetProblemStats)
-			guest.GET("/stats/users/:user_id", handlers.GetUserStats)
-		}
-
-		// User
-		user := api.Group("/")
-		user.Use(middleware.AuthMiddleware("User"))
+		// Authenticated routes
+		auth := api.Group("/")
+		auth.Use(middleware.AuthMiddleware("User"))
 		{
-			user.POST("/users/logout", handlers.Logout)
-			user.POST("/submissions", handlers.SubmitAssignment)
-			user.GET("/submissions", handlers.GetSubmissions)
-			user.GET("/submissions/:operatorId", handlers.GetSubmissionStatus)
-			user.GET("/submissions/:operatorId/source", handlers.GetSubmissionSource)
-			user.GET("/submissions/:operatorId/logs/:type", handlers.GetSubmissionLog)
-			user.GET("/users/me", handlers.GetMe)
-		}
+			// Routes for any authenticated user (User, Admin)
+			auth.POST("/users/logout", handlers.Logout)
+			auth.POST("/submissions", handlers.SubmitAssignment)
+			auth.GET("/submissions", handlers.GetSubmissions)
+			auth.GET("/submissions/:operatorId", handlers.GetSubmissionStatus)
+			auth.GET("/submissions/:operatorId/source", handlers.GetSubmissionSource)
+			auth.GET("/submissions/:operatorId/logs/:type", handlers.GetSubmissionLog)
+			auth.GET("/users/me", handlers.GetMe)
 
-		// Admin
-		admin := api.Group("/")
-		admin.Use(middleware.AuthMiddleware("Admin"))
-		{
-			admin.PUT("/problems", handlers.CreateProblem)
-			admin.GET("/problems/:id/testcases", handlers.DownloadTestCases)
-			admin.POST("/problems/:id/testdata", handlers.UploadTestData)
-			admin.DELETE("/problems/:id", handlers.DeleteProblem)
+			// Admin-only routes
+			admin := auth.Group("/")
+			admin.Use(middleware.AuthMiddleware("Admin"))
+			{
+				admin.PUT("/problems", handlers.CreateProblem)
+				admin.GET("/problems/:id/testcases", handlers.DownloadTestCases)
+				admin.POST("/problems/:id/testdata", handlers.UploadTestData)
+				admin.DELETE("/problems/:id", handlers.DeleteProblem)
+			}
 		}
 	}
 

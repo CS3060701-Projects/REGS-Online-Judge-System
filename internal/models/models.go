@@ -17,7 +17,7 @@ type JudgeResult struct {
 type User struct {
 	ID           uint   `gorm:"primaryKey"`
 	Username     string `gorm:"uniqueIndex;not null"`
-	PasswordHash string `gorm:"not null"`
+	PasswordHash string `gorm:"not null" json:"-"`
 	Role         string `gorm:"type:varchar(20);default:'User'"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time

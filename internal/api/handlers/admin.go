@@ -12,6 +12,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// CreateProblem godoc
+// @Summary Create or update a problem
+// @Description (Admin only) Creates a new problem. If a problem with the same ID exists and was soft-deleted, it will be restored and updated. If it exists and is active, it will return a conflict error.
+// @Tags Admin
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Param   problem body models.Problem true "Problem data"
+// @Success 200 {object} object{message=string, problem=models.Problem}
+// @Router /problems [put]
 func CreateProblem(c *gin.Context) {
 	var problem models.Problem
 	if err := c.ShouldBindJSON(&problem); err != nil {
@@ -59,6 +69,16 @@ func CreateProblem(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "題目建立成功", "problem": problem})
 }
 
+// UploadTestData godoc
+// @Summary Upload test data for a problem
+// @Description (Admin only) Uploads a .zip file containing test data (e.g., *.in, *.out files). This will replace any existing test data for the problem.
+// @Tags Admin
+// @Accept  multipart/form-data
+// @Produce  json
+// @Security Bearer
+// @Param   id path string true "Problem ID"
+// @Param   file formData file true "Test cases as a .zip file"
+// @Router /problems/{id}/testdata [post]
 func UploadTestData(c *gin.Context) {
 	problemID := c.Param("id")
 
@@ -100,6 +120,13 @@ func UploadTestData(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("題目 %s 測資上傳並更新完成", problemID)})
 }
 
+// DeleteProblem godoc
+// @Summary Delete a problem
+// @Description (Admin only) Soft-deletes a problem from the database and removes its associated test data files.
+// @Tags Admin
+// @Security Bearer
+// @Param   id path string true "Problem ID"
+// @Router /problems/{id} [delete]
 func DeleteProblem(c *gin.Context) {
 	problemID := c.Param("id")
 

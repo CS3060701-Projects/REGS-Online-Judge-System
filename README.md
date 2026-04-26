@@ -1,78 +1,115 @@
-# **CS3060701 期末專案 \- REGS (Online Judge System)**
-
-## **專案概述**
+# REGS - A Modern Online Judge System
 
 **REGS** 是一個現代化的線上評測系統（Online Judge），專為跨平台使用、自動化處理與環境隔離而設計。本系統結合了 **Docker 容器技術** 與 **CMake/Ninja 編譯工具鏈**，確保使用者提交的程式碼在完全隔離的沙盒環境中運行，並提供即時的評測結果與多階段日誌查詢。
 
-## ---
+---
 
-**核心功能**
+## ✨ 核心功能
 
-* **自動化編譯管線**：支援 .zip 格式上傳，自動執行 CMake 配置與 Ninja 編譯。  
-* **環境隔離與安全**：所有編譯與執行階段均在 Docker 容器內完成，並使用 \--network none 實施完全斷網隔離。  
-* **非同步評測隊列**：系統接收提交後立即回傳 operatorId，評測邏輯在背景透過 Job Queue 執行。  
-* **五種狀態判定**：準確回傳 **AC** (Accepted)、**WA** (Wrong Answer)、**CE** (Compile Error)、**RE** (Runtime Error)、**SE** (Setup Error) 與 **TLE** (Time Limit Exceeded)。  
-* **分層權限管理 (RBAC)**：定義了 Admin、User 與 Guest 三種權限角色，並以 JWT 進行身份驗證。
+*   **自動化編譯管線**：支援 `.zip` 格式上傳，自動執行 CMake 配置與 Ninja 編譯。
+*   **環境隔離與安全**：所有編譯與執行階段均在 Docker 容器內完成，並使用 `--network none` 實施完全斷網隔離。
+*   **非同步評測隊列**：系統接收提交後立即回傳 `operatorId`，評測邏輯在背景透過 Job Queue 執行，確保 API 高響應性。
+*   **多維度狀態判定**： **AC** (Accepted), **WA** (Wrong Answer), **CE** (Compile Error), **RE** (Runtime Error), **SE** (Setup Error) 與 **TLE** (Time Limit Exceeded)。
+*   **分層權限管理 (RBAC)**：定義了 `Admin`, `User` 與 `Guest` 三種權限角色，並以 ECDSA 簽署的 JWT 進行身份驗證。
+*   **完整的 API 文件**：透過 Swagger UI 提供互動式的 API 文件。
 
-## ---
+---
 
-**環境需求**
+## 🛠️ 技術使用
 
-* **Go**: 1.2x 或以上版本  
-* **Docker**: 需具備執行容器之權限，並預先下載映像檔：docker pull yhlib/cs3060701  
-* **PostgreSQL**: 作為主要的資料庫系統  
-* **CMake & Ninja**: 容器內部預裝的編譯工具鏈
+*   **後端**: Go, Gin
+*   **資料庫**: PostgreSQL, GORM
+*   **容器化**: Docker
+*   **編譯工具**: CMake, Ninja
+*   **API 文件**: Swagger
 
-## ---
+---
 
-**快速開始**
+## 🚀 快速開始
 
-### **1\. 資料庫配置**
+### 1. 環境準備
 
-請在 PostgreSQL 中建立名為 regs 的資料庫，並確保你的連接字串（DSN）正確配置於 internal/database/database.go。
+*   安裝 Go (建議版本 1.22 或以上)。
+*   安裝 Docker。
 
-### **2\. 啟動伺服器**
+### 2. 啟動步驟
 
-1.啟動 Docker Desktop 應用程式。
-2.於 regs-backend 啟動資料庫容器
-```Bash
-docker-compose up -d
+1.  **啟動資料庫**
+    在專案根目錄執行以下指令，背景啟動 PostgreSQL 服務。
+    ```bash
+    docker-compose up -d
+    ```
+
+2.  **建立管理員帳號 (首次執行)**
+    執行根目錄的 `Create-Admin.bat`。此腳本將會引導您建立第一位管理員帳號。
+    ```bash
+    .\Create-Admin.bat
+    ```
+
+3.  **啟動後端伺服器**
+    執行根目錄的 `Server.bat` 來編譯並啟動後端服務。
+    ```bash
+    .\Server.bat
+    ```
+
+4.  **訪問服務**
+    *   **API 服務**: `http://localhost:8081`
+    *   **API 文件**: `http://localhost:8081/swagger/index.html`
+
+---
+
+## 📖 API 文件與測試
+
+### 查看 API 文件
+
+在伺服器啟動後，您可以透過瀏覽器訪問以下網址來查看完整的互動式 API 文件：
+
+*   [http://localhost:8081/swagger/index.html](http://localhost:8081/swagger/index.html)
+
+### 測試 API
+
+1.  在 API 文件頁面中，點開您想測試的任何一個 API 端點。
+2.  點擊右上角的 **"Try it out"** 按鈕。
+3.  填寫必要的參數（例如，請求內文、路徑參數）。
+4.  對於需要授權的 API，請先透過 `/api/users/login` 取得 `token`，然後點擊頁面右上角的 **"Authorize"** 按鈕，在彈出的視窗中輸入 `Bearer <您的token>`。
+5.  點擊 **"Execute"** 按鈕即可發送請求並查看回應。
+
+---
+
+## 🧰 輔助腳本
+
+專案的script目錄中包含了方便開發的工具：
+
+*   `create_admin.bat`: 建立管理員帳號。
+*   `reset_database.bat`: **(危險操作)** 徹底清空資料庫，用於開發和測試。執行前會要求確認。
+
+---
+
+## ⚙️ 專案結構
+
 ```
-3.啟動 Server.bat
+regs-backend/
+├── cmd/                # 應用程式進入點
+│   ├── server/         # Web 伺服器主程式
+│   └── seed/           # 建立管理員的獨立工具
+├── docs/               # Swagger API 文件
+├── internal/           # 內部套件 (不應被外部引用)
+│   ├── api/            # API 處理邏輯 (handlers, middleware)
+│   ├── database/       # 資料庫連線與遷移
+│   ├── judge/          # 核心評測沙盒邏輯
+│   └── models/         # GORM 資料模型
+├── pkg/                # 可被外部引用的公共套件
+│   ├── jwt/            # JWT 產生與驗證
+│   └── utils/          # 通用工具函式 (如解壓縮)
+├── storage/            # 執行期間生成的檔案 (submissions, workspaces)
+├── testdata/           # 題目測資
+├── Server.bat          # 啟動伺服器腳本
+├── docker-compose.yml  # Docker 服務編排
+└── go.mod              # Go 模組定義
+```
 
-### **3\. 目錄結構準備**
+---
 
-系統啟動後會自動在根目錄建立以下資料夾，用於存放評測數據：
-
-* storage/submissions/：儲存使用者上傳的原始原始碼 zip 檔。  
-* storage/workspaces/：評測時的臨時工作空間與日誌檔。  
-* storage/testdata/：存放題目測資，支援 Admin 打包下載。
-
-## ---
-
-**API 權限表摘要**
-
-| 功能 | 方法 | URL | 權限要求 |
-| :---- | :---- | :---- | :---- |
-| 註冊/登入 | POST | /api/users/register, /api/users/login | Guest |
-| 題目清單 | GET | /api/problems | Guest |
-| 提交程式碼 | POST | /api/submissions | User |
-| 下載原始碼 | GET | /api/submissions/{id}/source | User (本人/Admin) |
-| 建立題目 | PUT | /api/problems | Admin |
-| 下載測資 | GET | /api/problems/{id}/testcases | Admin |
-
-## ---
-
-**評測流程說明**
-
-1. **任務受理**：伺服器接收壓縮檔後，分配 operatorId 並回傳。  
-2. **預處理**：檢查專案根目錄是否含有 CMakeLists.txt。  
-3. **配置與編譯**：在斷網容器中執行 cmake \-G Ninja 與 cmake \--build。若失敗則分別記錄為 SE 或 CE。  
-4. **執行與比對**：逐一執行測資點，監控 Exit Code（非 0 則為 RE）與資源消耗（TLE/MLE），並進行逐行結果比對。  
-5. **日誌產出**：所有階段的輸出將分別存為 configure.log、compile.log 與 output.log 供查詢。
-
-## ---
-
-**授權說明**
+## 授權
 
 本專案為 NTUST CS3060701 課程期末專案，相關內容遵循學術誠信規範。

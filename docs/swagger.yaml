@@ -1,0 +1,689 @@
+basePath: /api
+definitions:
+  handlers.AuthRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  handlers.ProblemStatsResponse:
+    properties:
+      ac_count:
+        type: integer
+      acceptance_rate:
+        type: number
+      status_distribution:
+        additionalProperties:
+          type: integer
+        type: object
+      total_submissions:
+        type: integer
+    type: object
+  handlers.UserStatsResponse:
+    properties:
+      acceptance_rate:
+        type: number
+      solved_count:
+        type: integer
+      status_distribution:
+        additionalProperties:
+          type: integer
+        type: object
+      total_submissions:
+        type: integer
+    type: object
+  models.Problem:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_visible:
+        type: boolean
+      memory_limit:
+        type: integer
+      testcase_path:
+        type: string
+      time_limit:
+        type: integer
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.Submission:
+    properties:
+      createdAt:
+        type: string
+      operatorID:
+        type: string
+      problem:
+        $ref: '#/definitions/models.Problem'
+      problemID:
+        type: string
+      run_memory:
+        type: integer
+      run_time:
+        type: integer
+      status:
+        description: Pending, AC, WA, CE, SE, RE, TLE
+        type: string
+      updatedAt:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      userID:
+        type: integer
+    type: object
+  models.User:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: integer
+      role:
+        type: string
+      updatedAt:
+        type: string
+      username:
+        type: string
+    type: object
+host: localhost:8081
+info:
+  contact:
+    name: API Support
+    url: https://github.com/your-repo
+  description: This is the API server for the REGS Online Judge system.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: REGS Online Judge API
+  version: "1.0"
+paths:
+  /problems:
+    get:
+      description: Retrieves a paginated list of visible problems.
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              ' data':
+                items:
+                  $ref: '#/definitions/models.Problem'
+                type: array
+              ' limit':
+                type: integer
+              ' page':
+                type: integer
+              total:
+                type: integer
+            type: object
+        "500":
+          description: 查詢題目列表失敗
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      summary: Get a list of problems
+      tags:
+      - Problems
+    put:
+      consumes:
+      - application/json
+      description: (Admin only) Creates a new problem. If a problem with the same
+        ID exists and was soft-deleted, it will be restored and updated. If it exists
+        and is active, it will return a conflict error.
+      parameters:
+      - description: Problem data
+        in: body
+        name: problem
+        required: true
+        schema:
+          $ref: '#/definitions/models.Problem'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              ' problem':
+                $ref: '#/definitions/models.Problem'
+              message:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create or update a problem
+      tags:
+      - Admin
+  /problems/{id}:
+    delete:
+      description: (Admin only) Soft-deletes a problem from the database and removes
+        its associated test data files.
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a problem
+      tags:
+      - Admin
+    get:
+      description: Retrieves the full description of a single visible problem.
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              description:
+                type: string
+            type: object
+        "404":
+          description: 找不到該題目，或題目尚未公開
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      summary: Get a single problem's details
+      tags:
+      - Problems
+  /problems/{id}/testcases:
+    get:
+      description: (Admin only) Downloads all test cases for a problem as a single
+        .zip file.
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/zip
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Download problem test cases
+      tags:
+      - Admin
+  /problems/{id}/testdata:
+    post:
+      consumes:
+      - multipart/form-data
+      description: (Admin only) Uploads a .zip file containing test data (e.g., *.in,
+        *.out files). This will replace any existing test data for the problem.
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Test cases as a .zip file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Upload test data for a problem
+      tags:
+      - Admin
+  /stats/problems/{problem_id}:
+    get:
+      description: Retrieves submission statistics for a specific problem, including
+        total submissions, AC count, and status distribution.
+      parameters:
+      - description: Problem ID
+        in: path
+        name: problem_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ProblemStatsResponse'
+      summary: Get statistics for a problem
+      tags:
+      - Statistics
+  /stats/users/{user_id}:
+    get:
+      description: Retrieves submission statistics for a specific user, including
+        total submissions, solved count, and status distribution.
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.UserStatsResponse'
+      summary: Get statistics for a user
+      tags:
+      - Statistics
+  /submissions:
+    get:
+      description: Retrieves a list of all submissions made by the currently authenticated
+        user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Submission'
+            type: array
+        "401":
+          description: 未授權的操作
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: 無法取得提交紀錄
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get personal submission history
+      tags:
+      - Submissions
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a .zip file containing source code for a specific problem.
+      parameters:
+      - description: Problem ID (e.g., p1001)
+        in: formData
+        name: problem_id
+        required: true
+        type: string
+      - description: Source code as a .zip file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 提交成功，開始評測
+          schema:
+            properties:
+              ' operatorId':
+                type: string
+              ' userId':
+                type: integer
+              message:
+                type: string
+            type: object
+        "400":
+          description: 請求錯誤
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: 伺服器內部錯誤
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Submit code for judging
+      tags:
+      - Submissions
+  /submissions/{operatorId}:
+    get:
+      description: Retrieves the current status and result of a specific submission.
+      parameters:
+      - description: Operator ID of the submission
+        in: path
+        name: operatorId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              ' created_at':
+                type: string
+              ' run_memory':
+                type: integer
+              ' run_time':
+                type: integer
+              ' status':
+                type: string
+              operatorId:
+                type: string
+            type: object
+        "404":
+          description: 找不到該筆評測紀錄
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get submission status
+      tags:
+      - Submissions
+  /submissions/{operatorId}/logs/{type}:
+    get:
+      description: Downloads a specific log file (configure, compile, or output) for
+        a submission.
+      parameters:
+      - description: Operator ID of the submission
+        in: path
+        name: operatorId
+        required: true
+        type: string
+      - description: Log type
+        enum:
+        - configure
+        - compile
+        - output
+        in: path
+        name: type
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Log file content
+          schema:
+            type: file
+        "400":
+          description: 無效的日誌類型
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: 找不到指定的日誌檔案
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get submission log file
+      tags:
+      - Submissions
+  /submissions/{operatorId}/source:
+    get:
+      description: Downloads the original .zip file for a submission. Only accessible
+        by the owner or an admin.
+      parameters:
+      - description: Operator ID of the submission
+        in: path
+        name: operatorId
+        required: true
+        type: string
+      produces:
+      - application/zip
+      responses:
+        "200":
+          description: The submission's source code as a .zip file
+          schema:
+            type: file
+      security:
+      - ApiKeyAuth: []
+      summary: Download submission source code
+      tags:
+      - Submissions
+  /users/{user_id}/submissions:
+    get:
+      description: Retrieves a list of all submissions made by a specific user.
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Submission'
+            type: array
+      summary: Get a specific user's submission history
+      tags:
+      - Submissions
+  /users/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user and returns a JWT token.
+      parameters:
+      - description: User Login Credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.AuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 登入成功
+          schema:
+            properties:
+              ' role':
+                type: string
+              ' token':
+                type: string
+              message:
+                type: string
+            type: object
+        "400":
+          description: 格式錯誤
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "401":
+          description: 帳號或密碼錯誤
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Token 生成失敗
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      summary: Log in a user
+      tags:
+      - Users
+  /users/logout:
+    post:
+      description: Invalidates the current user's JWT by adding it to a blacklist.
+      responses:
+        "200":
+          description: 登出成功
+          schema:
+            properties:
+              message:
+                type: string
+            type: object
+        "400":
+          description: 無效的請求標頭
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "401":
+          description: 無效的 Token
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: 登出操作失敗
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Log out the current user
+      tags:
+      - Users
+  /users/me:
+    get:
+      description: Retrieves the profile information of the currently authenticated
+        user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "401":
+          description: 未授權的操作
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: 找不到使用者資料
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get current user's profile
+      tags:
+      - Users
+  /users/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user account. The first user registered will be an
+        admin.
+      parameters:
+      - description: User Registration Info
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.AuthRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 註冊成功
+          schema:
+            properties:
+              ' role':
+                type: string
+              ' user_id':
+                type: integer
+              message:
+                type: string
+            type: object
+        "400":
+          description: 格式錯誤
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "409":
+          description: 使用者名稱已被註冊
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: 伺服器內部錯誤
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      summary: Register a new user
+      tags:
+      - Users
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -21,14 +21,19 @@ type Claims struct {
 }
 
 func InitKeys() error {
-	privBytes, _ := os.ReadFile("private.pem")
-	var err error
+	privBytes, err := os.ReadFile("private.pem")
+	if err != nil {
+		return err
+	}
 	SignKey, err = jwtlib.ParseECPrivateKeyFromPEM(privBytes)
 	if err != nil {
 		return err
 	}
 
-	pubBytes, _ := os.ReadFile("public.pem")
+	pubBytes, err := os.ReadFile("public.pem")
+	if err != nil {
+		return err
+	}
 	VerifyKey, err = jwtlib.ParseECPublicKeyFromPEM(pubBytes)
 	return err
 }

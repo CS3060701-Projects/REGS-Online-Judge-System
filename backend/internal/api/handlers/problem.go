@@ -7,13 +7,20 @@ import (
 	"path/filepath"
 	"regs-backend/internal/database"
 	"regs-backend/internal/models"
+	"sort"
 	"strconv"
+	"strings"
 
 	"archive/zip"
 	"io"
 
 	"github.com/gin-gonic/gin"
 )
+
+type ExampleCase struct {
+	Input  string `json:"input"`
+	Output string `json:"output"`
+}
 
 // GetProblems godoc
 // @Summary Get a list of problems
@@ -83,6 +90,77 @@ func GetProblem(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"description": problem.Description,
 	})
+}
+
+// GetProblemExamples godoc
+// @Summary Get a problem's example test cases
+// @Description Retrieves up to 2 example test cases (input/output) for a visible problem.
+// @Tags Problems
+// @Produce  json
+// @Param   id path string true "Problem ID"
+// @Success 200 {object} object{examples=[]ExampleCase}
+// @Failure 404 {object} object{error=string} "找不到該題目，或題目尚未公開"
+// @Router /problems/{id}/examples [get]
+func GetProblemExamples(c *gin.Context) {
+	problemID := c.Param("id")
+
+	var problem models.Problem
+	result := database.DB.Select("id").
+		Where("id = ? AND is_visible = ?", problemID, true).
+		First(&problem)
+	if result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "找不到該題目，或題目尚未公開"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"examples": readExampleCases(problemID),
+	})
+}
+
+func readExampleCases(problemID string) []ExampleCase {
+	testDataDir := filepath.Join("testdata", problemID)
+	entries, err := os.ReadDir(testDataDir)
+	if err != nil {
+		return []ExampleCase{}
+	}
+
+	inFiles := make([]string, 0)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasSuffix(name, ".in") {
+			inFiles = append(inFiles, name)
+		}
+	}
+	sort.Strings(inFiles)
+
+	examples := make([]ExampleCase, 0, 2)
+	for _, inFile := range inFiles {
+		if len(examples) >= 2 {
+			break
+		}
+
+		base := strings.TrimSuffix(inFile, ".in")
+		outFile := base + ".out"
+		inPath := filepath.Join(testDataDir, inFile)
+		outPath := filepath.Join(testDataDir, outFile)
+
+		inBytes, inErr := os.ReadFile(inPath)
+		outBytes, outErr := os.ReadFile(outPath)
+		if inErr != nil || outErr != nil {
+			continue
+		}
+
+		examples = append(examples, ExampleCase{
+			Input:  strings.TrimRight(string(inBytes), "\r\n"),
+			Output: strings.TrimRight(string(outBytes), "\r\n"),
+		})
+	}
+
+	return examples
 }
 
 // DownloadTestCases godoc

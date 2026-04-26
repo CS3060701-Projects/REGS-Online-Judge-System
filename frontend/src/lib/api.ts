@@ -1,5 +1,5 @@
 import { getToken } from "./auth";
-import type { Problem, ProblemStats, Submission, User } from "../types";
+import type { ExampleCase, Problem, ProblemStats, Submission, User } from "../types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8081/api";
 
@@ -56,6 +56,7 @@ export const api = {
   getProblems: (page = 1, limit = 20) =>
     request<{ total: number; page: number; limit: number; data: Problem[] }>(`/problems?page=${page}&limit=${limit}`),
   getProblem: (id: string) => request<{ description: string }>(`/problems/${id}`),
+  getProblemExamples: (id: string) => request<{ examples: ExampleCase[] }>(`/problems/${id}/examples`),
   getProblemStats: (id: string) => request<ProblemStats>(`/stats/problems/${id}`),
 
   submit: async (problemId: string, file: File) => {

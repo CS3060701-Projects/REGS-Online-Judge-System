@@ -36,3 +36,8 @@ export interface ProblemStats {
   acceptance_rate: number;
   status_distribution: Record<string, number>;
 }
+
+export interface ExampleCase {
+  input: string;
+  output: string;
+}

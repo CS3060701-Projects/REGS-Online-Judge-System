@@ -2,12 +2,13 @@ import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
-import type { ProblemStats } from "../types";
+import type { ExampleCase, ProblemStats } from "../types";
 
 export function ProblemDetailPage() {
   const { id = "" } = useParams();
   const { token } = useAuth();
   const [description, setDescription] = useState("");
+  const [examples, setExamples] = useState<ExampleCase[]>([]);
   const [stats, setStats] = useState<ProblemStats | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [operatorId, setOperatorId] = useState("");
@@ -16,7 +17,16 @@ export function ProblemDetailPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    api.getProblem(id).then((res) => setDescription(res.description)).catch((err) => setError((err as Error).message));
+    api
+      .getProblem(id)
+      .then((res) => {
+        setDescription(res.description);
+      })
+      .catch((err) => setError((err as Error).message));
+    api
+      .getProblemExamples(id)
+      .then((res) => setExamples(res.examples || []))
+      .catch(() => setExamples([]));
     api.getProblemStats(id).then(setStats).catch(() => null);
   }, [id]);
 
@@ -46,6 +56,26 @@ export function ProblemDetailPage() {
         </div>
       </section>
       <pre className="desc">{description || "載入中..."}</pre>
+      {examples.length > 0 && (
+        <section className="examples">
+          <h3>範例測資</h3>
+          {examples.map((ex, idx) => (
+            <div key={`${idx}-${ex.input.slice(0, 10)}`} className="example-card">
+              <p className="example-title">範例 {idx + 1}</p>
+              <div className="example-grid">
+                <div>
+                  <p className="example-label">Input</p>
+                  <pre className="example-block">{ex.input}</pre>
+                </div>
+                <div>
+                  <p className="example-label">Output</p>
+                  <pre className="example-block">{ex.output}</pre>
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
       {stats && (
         <div className="metrics">
           <div className="metric-card">

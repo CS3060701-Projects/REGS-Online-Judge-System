@@ -77,6 +77,7 @@ func main() {
 		api.POST("/users/login", handlers.Login)
 		api.GET("/problems", handlers.GetProblems)
 		api.GET("/problems/:id", handlers.GetProblem)
+		api.GET("/problems/:id/examples", handlers.GetProblemExamples)
 		api.GET("/users/:user_id/submissions", handlers.GetUserSubmissions)
 		api.GET("/stats/problems/:problem_id", handlers.GetProblemStats)
 		api.GET("/stats/users/:user_id", handlers.GetUserStats)

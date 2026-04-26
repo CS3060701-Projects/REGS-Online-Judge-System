@@ -90,7 +90,7 @@ func GetProblem(c *gin.Context) {
 // @Description (Admin only) Downloads all test cases for a problem as a single .zip file.
 // @Tags Admin
 // @Produce  application/zip
-// @Security ApiKeyAuth
+// @Security Bearer
 // @Param   id path string true "Problem ID"
 // @Router /problems/{id}/testcases [get]
 func DownloadTestCases(c *gin.Context) {

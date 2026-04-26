@@ -18,7 +18,7 @@ import (
 // @Tags Admin
 // @Accept  json
 // @Produce  json
-// @Security ApiKeyAuth
+// @Security Bearer
 // @Param   problem body models.Problem true "Problem data"
 // @Success 200 {object} object{message=string, problem=models.Problem}
 // @Router /problems [put]
@@ -75,7 +75,7 @@ func CreateProblem(c *gin.Context) {
 // @Tags Admin
 // @Accept  multipart/form-data
 // @Produce  json
-// @Security ApiKeyAuth
+// @Security Bearer
 // @Param   id path string true "Problem ID"
 // @Param   file formData file true "Test cases as a .zip file"
 // @Router /problems/{id}/testdata [post]
@@ -124,7 +124,7 @@ func UploadTestData(c *gin.Context) {
 // @Summary Delete a problem
 // @Description (Admin only) Soft-deletes a problem from the database and removes its associated test data files.
 // @Tags Admin
-// @Security ApiKeyAuth
+// @Security Bearer
 // @Param   id path string true "Problem ID"
 // @Router /problems/{id} [delete]
 func DeleteProblem(c *gin.Context) {

@@ -1,6 +1,8 @@
 package handlers
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type JudgeJob struct {
 	OperatorID string
@@ -22,9 +24,7 @@ func InitJudger(maxWorkers int) {
 func worker(workerID int) {
 	for job := range JobQueue {
 		fmt.Printf("[Worker %d] 開始處理任務: %s\n", workerID, job.OperatorID)
-
 		processSubmission(job.OperatorID, job.Workspace, job.ProblemID)
-
 		fmt.Printf("[Worker %d] 完成任務: %s\n", workerID, job.OperatorID)
 	}
 }

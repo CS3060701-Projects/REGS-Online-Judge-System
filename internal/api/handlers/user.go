@@ -109,7 +109,7 @@ func Login(c *gin.Context) {
 // @Summary Log out the current user
 // @Description Invalidates the current user's JWT by adding it to a blacklist.
 // @Tags Users
-// @Security ApiKeyAuth
+// @Security Bearer
 // @Success 200 {object} object{message=string} "登出成功"
 // @Failure 400 {object} object{error=string} "無效的請求標頭"
 // @Failure 401 {object} object{error=string} "無效的 Token"
@@ -147,7 +147,7 @@ func Logout(c *gin.Context) {
 // @Description Retrieves the profile information of the currently authenticated user.
 // @Tags Users
 // @Produce  json
-// @Security ApiKeyAuth
+// @Security Bearer
 // @Success 200 {object} models.User
 // @Failure 401 {object} object{error=string} "未授權的操作"
 // @Failure 404 {object} object{error=string} "找不到使用者資料"

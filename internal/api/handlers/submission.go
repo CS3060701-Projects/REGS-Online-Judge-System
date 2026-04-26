@@ -24,7 +24,7 @@ import (
 // @Tags Submissions
 // @Accept  multipart/form-data
 // @Produce  json
-// @Security ApiKeyAuth
+// @Security Bearer
 // @Param   problem_id formData string true "Problem ID (e.g., p1001)"
 // @Param   file formData file true "Source code as a .zip file"
 // @Success 200 {object} object{message=string, operatorId=string, userId=integer} "提交成功，開始評測"
@@ -174,7 +174,7 @@ func updateSubmissionStatus(operatorID string, status string) {
 // @Description Retrieves the current status and result of a specific submission.
 // @Tags Submissions
 // @Produce  json
-// @Security ApiKeyAuth
+// @Security Bearer
 // @Param   operatorId path string true "Operator ID of the submission"
 // @Success 200 {object} object{operatorId=string, status=string, created_at=string, run_time=integer, run_memory=integer}
 // @Failure 404 {object} object{error=string} "找不到該筆評測紀錄"
@@ -202,7 +202,7 @@ func GetSubmissionStatus(c *gin.Context) {
 // @Description Downloads a specific log file (configure, compile, or output) for a submission.
 // @Tags Submissions
 // @Produce  plain
-// @Security ApiKeyAuth
+// @Security Bearer
 // @Param   operatorId path string true "Operator ID of the submission"
 // @Param   type path string true "Log type" Enums(configure, compile, output)
 // @Success 200 {file} file "Log file content"
@@ -250,7 +250,7 @@ func getSubmissionsByUserID(userID string) ([]models.Submission, error) {
 // @Description Retrieves a list of all submissions made by the currently authenticated user.
 // @Tags Submissions
 // @Produce  json
-// @Security ApiKeyAuth
+// @Security Bearer
 // @Success 200 {array} models.Submission
 // @Failure 401 {object} object{error=string} "未授權的操作"
 // @Failure 500 {object} object{error=string} "無法取得提交紀錄"
@@ -301,7 +301,7 @@ func GetUserSubmissions(c *gin.Context) {
 // @Description Downloads the original .zip file for a submission. Only accessible by the owner or an admin.
 // @Tags Submissions
 // @Produce  application/zip
-// @Security ApiKeyAuth
+// @Security Bearer
 // @Param   operatorId path string true "Operator ID of the submission"
 // @Success 200 {file} file "The submission's source code as a .zip file"
 // @Router /submissions/{operatorId}/source [get]

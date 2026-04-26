@@ -89,7 +89,7 @@ const docTemplate = `{
             "put": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "(Admin only) Creates a new problem. If a problem with the same ID exists and was soft-deleted, it will be restored and updated. If it exists and is active, it will return a conflict error.",
@@ -179,7 +179,7 @@ const docTemplate = `{
             "delete": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "(Admin only) Soft-deletes a problem from the database and removes its associated test data files.",
@@ -203,7 +203,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "(Admin only) Downloads all test cases for a problem as a single .zip file.",
@@ -230,7 +230,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "(Admin only) Uploads a .zip file containing test data (e.g., *.in, *.out files). This will replace any existing test data for the problem.",
@@ -325,7 +325,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Retrieves a list of all submissions made by the currently authenticated user.",
@@ -373,7 +373,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Upload a .zip file containing source code for a specific problem.",
@@ -450,7 +450,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Retrieves the current status and result of a specific submission.",
@@ -512,7 +512,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Downloads a specific log file (configure, compile, or output) for a submission.",
@@ -580,7 +580,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Downloads the original .zip file for a submission. Only accessible by the owner or an admin.",
@@ -692,7 +692,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Invalidates the current user's JWT by adding it to a blacklist.",
@@ -752,7 +752,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Retrieves the profile information of the currently authenticated user.",
@@ -1052,10 +1052,11 @@ const docTemplate = `{
         }
     },
     "securityDefinitions": {
-        "ApiKeyAuth": {
+        "Bearer": {
             "type": "apiKey",
             "name": "Authorization",
-            "in": "header"
+            "in": "header",
+            "description": "請在此欄位輸入 'Bearer ' 字串，並在其後加上您的 JWT Token。"
         }
     }
 }`

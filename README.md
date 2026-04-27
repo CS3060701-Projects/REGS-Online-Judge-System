@@ -39,6 +39,7 @@
     ```bash
     docker-compose up -d
     ```
+
 2.  **啟動後端伺服器**
     執行根目錄的 `Server.bat` 來編譯並啟動後端服務。
 

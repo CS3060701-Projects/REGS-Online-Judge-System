@@ -40,19 +40,13 @@
     docker-compose up -d
     ```
 
-2.  **建立管理員帳號 (首次執行)**
-    執行根目錄的 `Create-Admin.bat`。此腳本將會引導您建立第一位管理員帳號。
-    ```bash
-    .\Create-Admin.bat
-    ```
-
-3.  **啟動後端伺服器**
+2.  **啟動後端伺服器**
     執行根目錄的 `Server.bat` 來編譯並啟動後端服務。
     ```bash
     .\Server.bat
     ```
 
-4.  **訪問服務**
+3.  **訪問服務**
     *   **API 服務**: `http://localhost:8081`
     *   **API 文件**: `http://localhost:8081/swagger/index.html`
 

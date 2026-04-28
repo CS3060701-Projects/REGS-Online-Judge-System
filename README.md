@@ -14,8 +14,8 @@ REGS 是一套線上評測系統（Online Judge），包含：
 ```text
 REGS-Backend/
 ├─ backend/            # Go 後端服務
-├─ frontend/           # React 前端服務（含 Start-Frontend.bat）
-├─ Start-All.bat       # 一鍵同時啟動前後端（Windows）
+├─ frontend/           # React 前端服務
+├─ start_all.bat       # 腳本同時啟動前後端（Windows）
 └─ README.md           # 本文件
 ```
 
@@ -45,7 +45,7 @@ REGS-Backend/
 
 ## 本機開發啟動
 
-## 1) 啟動後端
+## (1) 啟動後端
 
 請參考 `backend/README.md` 先啟動 PostgreSQL 與後端服務。
 
@@ -54,25 +54,13 @@ REGS-Backend/
 - API：`http://localhost:8081`
 - Swagger：`http://localhost:8081/swagger/index.html`
 
-## 2) 啟動前端
 
-在 `frontend` 目錄內執行：
-
-```bat
-start_frontend.bat
-```
-
-會開一個新視窗啟動前端。
-
-前端開發網址：`http://localhost:5173`
-
-
-## 3) 一鍵同時啟動（Windows）
+## (2) 一鍵同時啟動（Windows）
 
 在專案根目錄直接執行：
 
 ```bat
-Start-All.bat
+start-all.bat
 ```
 
 會開兩個視窗分別啟動 backend / frontend。
@@ -88,10 +76,10 @@ VITE_API_BASE_URL=http://localhost:8081/api
 
 ---
 
-## API 注意事項（目前前端有使用）
+## API 注意事項
 
 - `GET /api/problems/:id`：取得題目敘述
-- `GET /api/problems/:id/examples`：取得範例測資（新增 API，不影響既有 API）
+- `GET /api/problems/:id/examples`：取得範例測資
 - `GET /api/stats/problems/:problem_id`：題目統計
 - `POST /api/users/login`：登入
 - `POST /api/submissions`：提交

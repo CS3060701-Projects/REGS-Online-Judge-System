@@ -86,7 +86,7 @@ func main() {
 		auth := api.Group("/")
 		auth.Use(middleware.AuthMiddleware("User"))
 		{
-			// Routes for any authenticated user (User, Admin)
+			// Routes for any authenticated user
 			auth.POST("/users/logout", handlers.Logout)
 			auth.POST("/submissions", handlers.SubmitAssignment)
 			auth.GET("/submissions", handlers.GetSubmissions)

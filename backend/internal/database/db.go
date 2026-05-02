@@ -33,7 +33,6 @@ func Connect() {
 
 	syncProblemsFromFolder("testdata")
 }
-
 func syncProblemsFromFolder(baseDir string) {
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {

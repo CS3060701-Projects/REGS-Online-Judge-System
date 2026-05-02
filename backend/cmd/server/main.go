@@ -6,7 +6,6 @@ import (
 	"regs-backend/internal/api/handlers"
 	"regs-backend/internal/api/middleware"
 	"regs-backend/internal/database"
-	"regs-backend/internal/models"
 	jwtPkg "regs-backend/pkg/jwt"
 
 	_ "regs-backend/docs"

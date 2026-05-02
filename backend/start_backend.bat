@@ -1,5 +1,4 @@
 @echo off
-:: 設定編碼為 UTF-8
 chcp 65001 >nul
 title REGS 後端伺服器
 

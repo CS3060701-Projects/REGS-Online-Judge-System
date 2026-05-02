@@ -25,7 +25,7 @@ func Connect() {
 
 	fmt.Println("成功連線到 PostgreSQL!")
 
-	err = DB.AutoMigrate(&models.User{}, &models.Problem{}, &models.Submission{})
+	err = DB.AutoMigrate(&models.User{}, &models.Problem{}, &models.Submission{}, &models.JwtBlacklist{})
 	if err != nil {
 		log.Fatal("資料庫遷移失敗:", err)
 	}
@@ -33,7 +33,6 @@ func Connect() {
 
 	syncProblemsFromFolder("testdata")
 }
-
 func syncProblemsFromFolder(baseDir string) {
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {

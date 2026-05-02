@@ -23,12 +23,9 @@ REM Start backend server
 start "REGS Backend" cmd /k "pushd ""%BACKEND_DIR%"" && go run ./cmd/server"
 
 REM Start frontend dev server
-start "REGS Frontend" cmd /k "pushd ""%FRONTEND_DIR%"" && if not exist node_modules (npm install) && npm run dev"
+start "REGS Frontend" cmd /k "pushd ""%FRONTEND_DIR%"" && npm run dev"
 
-echo Done. You should get:
-echo - Backend:  http://localhost:8081
-echo - Frontend: http://localhost:5173
-echo.
+echo Done.
 echo You can close this window.
 
 endlocal

@@ -6,7 +6,6 @@ import (
 	"regs-backend/internal/api/handlers"
 	"regs-backend/internal/api/middleware"
 	"regs-backend/internal/database"
-	"regs-backend/internal/models"
 	jwtPkg "regs-backend/pkg/jwt"
 
 	_ "regs-backend/docs"
@@ -35,17 +34,6 @@ import (
 // @name Authorization
 func main() {
 	database.Connect()
-
-	err := database.DB.AutoMigrate(
-		&models.Submission{},
-		&models.User{},
-		&models.Problem{},
-		&models.JwtBlacklist{},
-	)
-
-	if err != nil {
-		log.Fatalf("資料庫遷移失敗: %v", err)
-	}
 
 	if err := jwtPkg.InitKeys(); err != nil {
 		log.Fatal("JWT 初始化失敗:", err)

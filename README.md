@@ -1,6 +1,6 @@
 # Remote-Evaluation-and-Grading-System
 
-REGS 是一套線上評測系統（Online Judge），包含：
+REGS 是一套線上程式評測系統（Online Judge），包含：
 
 - `backend`：Go + Gin + PostgreSQL + Docker sandbox 程式測試
 - `frontend`：React + TypeScript + Vite 使用者介面
@@ -11,13 +11,12 @@ REGS 是一套線上評測系統（Online Judge），包含：
 
 ## 專案結構
 
-```text
-REGS-Backend/
-├─ backend/            # Go 後端服務
-├─ frontend/           # React 前端服務
-├─ start_all.bat       # 腳本同時啟動前後端（Windows）
-└─ README.md           # 本文件
-```
+### backend
+- Go 後端服務
+### frontend
+- React 前端服務（含 Start-Frontend.bat）
+### Start-All.bat
+- 一鍵同時啟動 backend / frontend
 
 ---
 
@@ -42,27 +41,16 @@ REGS-Backend/
 
 ---
 
-## 本機開發啟動
+### 本機開發啟動
 
-## (1) 啟動後端
+## 一鍵同時啟動（Windows）
 
-請參考 `backend/README.md` 先啟動 PostgreSQL 與後端服務。
-
-常用 URL：
-
-- API：`http://localhost:8081`
-- Swagger：`http://localhost:8081/swagger/index.html`
-
-
-## (2) 一鍵同時啟動（Windows）
-
-在專案根目錄直接執行：
+在專案根目錄直接執行，會同時開啟兩個視窗分別啟動 backend / frontend。：
 
 ```bat
 start-all.bat
 ```
 
-會開兩個視窗分別啟動 backend / frontend。
 ---
 
 ## 環境變數

@@ -36,17 +36,6 @@ import (
 func main() {
 	database.Connect()
 
-	err := database.DB.AutoMigrate(
-		&models.Submission{},
-		&models.User{},
-		&models.Problem{},
-		&models.JwtBlacklist{},
-	)
-
-	if err != nil {
-		log.Fatalf("資料庫遷移失敗: %v", err)
-	}
-
 	if err := jwtPkg.InitKeys(); err != nil {
 		log.Fatal("JWT 初始化失敗:", err)
 	}

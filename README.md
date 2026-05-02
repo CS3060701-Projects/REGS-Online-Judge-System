@@ -15,7 +15,7 @@ REGS 是一套線上程式評測系統（Online Judge），包含：
 - Go 後端服務
 ### frontend
 - React 前端服務（含 Start-Frontend.bat）
-### Start-All.bat
+### start-all.bat
 - 一鍵同時啟動 backend / frontend
 
 ---

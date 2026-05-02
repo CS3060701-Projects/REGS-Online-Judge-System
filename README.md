@@ -5,7 +5,7 @@ REGS 是一套線上程式評測系統（Online Judge），包含：
 - `backend`：Go + Gin + PostgreSQL + Docker sandbox 程式測試
 - `frontend`：React + TypeScript + Vite 使用者介面
 
-此專案目前為「前後端分離」架構：前端呼叫後端 API 進行認證、題目查詢、提交與評測結果查詢。
+此專案目前為前後端分離架構：前端呼叫後端 API 進行認證、題目查詢、提交與評測結果查詢。
 
 ---
 
@@ -27,7 +27,6 @@ REGS 是一套線上程式評測系統（Online Judge），包含：
 - 使用者註冊 / 登入 / 登出
 - 題目列表與搜尋
 - 題目詳情與統計資訊
-- 題目範例測資顯示（最多兩筆 input/output）
 - 提交 zip 程式碼
 - 我的提交紀錄 / 單筆 operatorId 查詢
 - 管理員題目管理（建立、更新、刪除、上傳測資）
@@ -49,7 +48,7 @@ REGS 是一套線上程式評測系統（Online Judge），包含：
 在專案根目錄直接執行，會同時開啟兩個視窗分別啟動 backend / frontend。：
 
 ```bat
-Start-All.bat
+start-all.bat
 ```
 
 ---
@@ -64,10 +63,10 @@ VITE_API_BASE_URL=http://localhost:8081/api
 
 ---
 
-## API 注意事項（目前前端有使用）
+## API 注意事項
 
 - `GET /api/problems/:id`：取得題目敘述
-- `GET /api/problems/:id/examples`：取得範例測資（新增 API，不影響既有 API）
+- `GET /api/problems/:id/examples`：取得範例測資
 - `GET /api/stats/problems/:problem_id`：題目統計
 - `POST /api/users/login`：登入
 - `POST /api/submissions`：提交

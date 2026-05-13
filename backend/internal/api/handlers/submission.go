@@ -82,6 +82,16 @@ func SubmitAssignment(c *gin.Context) {
 		return
 	}
 
+	if err := utils.Unzip(zipPath, workspace); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "解壓縮失敗，請檢查檔案格式"})
+		return
+	}
+
+	if err := replaceUploadedEntrypointWithProblemEntrypoint(workspace, problem); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "替換官方 entrypoint.cpp 失敗"})
+		return
+	}
+
 	submission := models.Submission{
 		OperatorID: operatorID,
 		ProblemID:  problemID,
@@ -107,43 +117,135 @@ func SubmitAssignment(c *gin.Context) {
 	})
 }
 
+func replaceUploadedEntrypointWithProblemEntrypoint(workspace string, problem models.Problem) error {
+	problemRoot := problem.TestcasePath
+	if problemRoot == "" {
+		problemRoot = filepath.Join("testdata", problem.ID)
+	}
+
+	problemEntrypointPath := filepath.Join(problemRoot, "solution", "entrypoint.cpp")
+	if _, err := os.Stat(problemEntrypointPath); err != nil {
+		return fmt.Errorf("題目官方 entrypoint.cpp 不存在: %s", problemEntrypointPath)
+	}
+
+	if err := filepath.WalkDir(workspace, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		if strings.EqualFold(d.Name(), "entrypoint.cpp") {
+			if err := os.Remove(path); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	officialEntrypoint, err := os.ReadFile(problemEntrypointPath)
+	if err != nil {
+		return err
+	}
+
+	workspaceEntrypointPath := filepath.Join(workspace, "entrypoint.cpp")
+	if err := os.WriteFile(workspaceEntrypointPath, officialEntrypoint, 0644); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func processSubmission(operatorID, workspace, problemID string) {
 	var problem models.Problem
 	if err := database.DB.First(&problem, "id = ?", problemID).Error; err != nil {
 		updateSubmissionStatus(operatorID, "SE")
+		fmt.Printf("[%s] 無法找到題目資料: %v\n", operatorID, err)
 		return
 	}
 
-	absWorkspace, _ := filepath.Abs(workspace)
+	absWorkspace, err := filepath.Abs(workspace)
+	if err != nil {
+		updateSubmissionStatus(operatorID, "SE")
+		fmt.Printf("[%s] 無法取得 workspace 絕對路徑: %v\n", operatorID, err)
+		return
+	}
+	absWorkspace = filepath.ToSlash(absWorkspace)
+
 	updateSubmissionStatus(operatorID, "Compiling")
 
-	if _, err := os.Stat(filepath.Join(workspace, "CMakeLists.txt")); os.IsNotExist(err) {
+	problemRoot := problem.TestcasePath
+	if problemRoot == "" {
+		problemRoot = filepath.Join("testdata", problemID)
+	}
+
+	if _, err := os.Stat(filepath.Join(problemRoot, "CMakeLists.txt")); err != nil {
 		updateSubmissionStatus(operatorID, "SE")
+		fmt.Printf("[%s] 題目資料夾缺少 CMakeLists.txt: %s\n", operatorID, filepath.Join(problemRoot, "CMakeLists.txt"))
+		return
+	}
+
+	absProblemRoot, err := filepath.Abs(problemRoot)
+	if err != nil {
+		updateSubmissionStatus(operatorID, "SE")
+		fmt.Printf("[%s] 無法取得題目根目錄絕對路徑: %v\n", operatorID, err)
+		return
+	}
+	absProblemRoot = filepath.ToSlash(absProblemRoot)
+
+	buildDir := filepath.Join(workspace, "build")
+	if err := os.RemoveAll(buildDir); err != nil {
+		updateSubmissionStatus(operatorID, "SE")
+		fmt.Printf("[%s] 無法清理 build 目錄: %v\n", operatorID, err)
 		return
 	}
 
 	configCmd := exec.Command(
 		"docker", "run", "--rm",
 		"--network", "none",
-		"-v", absWorkspace+":/app", "-w", "/app",
-		models.JUDGER_IMAGE, "cmake", "-G", "Ninja", "-B", "build",
+		"-v", absWorkspace+":/upload",
+		"-v", absProblemRoot+":/problem:ro",
+		"-v", absWorkspace+":/app",
+		"-w", "/app",
+		models.JUDGER_IMAGE,
+		"cmake",
+		"-S", "/problem",
+		"-B", "build",
+		"-D", "SOURCE_ROOT=/upload",
+		"-G", "Ninja",
 	)
-	configOut, _ := configCmd.CombinedOutput()
+
+	configOut, configErr := configCmd.CombinedOutput()
 	os.WriteFile(filepath.Join(workspace, "configure.log"), configOut, 0644)
-	if !configCmd.ProcessState.Success() {
-		updateSubmissionStatus(operatorID, "SE")
+	if configErr != nil {
+		updateSubmissionStatus(operatorID, "CE")
+		fmt.Printf("[%s] Configure 失敗，請檢查 configure.log. Error: %v\n", operatorID, configErr)
 		return
 	}
 
-	buildCmd := exec.Command("docker", "run", "--rm",
+	buildCmd := exec.Command(
+		"docker", "run", "--rm",
 		"--network", "none",
-		"-v", absWorkspace+":/app", "-w", "/app",
-		models.JUDGER_IMAGE, "cmake", "--build", "build",
+		"-v", absWorkspace+":/upload",
+		"-v", absProblemRoot+":/problem:ro",
+		"-v", absWorkspace+":/app",
+		"-w", "/app",
+		models.JUDGER_IMAGE,
+		"cmake",
+		"--build", "build",
+		"--parallel",
 	)
-	buildOut, _ := buildCmd.CombinedOutput()
+
+	buildOut, buildErr := buildCmd.CombinedOutput()
 	os.WriteFile(filepath.Join(workspace, "compile.log"), buildOut, 0644)
-	if !buildCmd.ProcessState.Success() {
+	if buildErr != nil {
 		updateSubmissionStatus(operatorID, "CE")
+		fmt.Printf("[%s] 編譯失敗，請檢查 compile.log. Error: %v\n", operatorID, buildErr)
 		return
 	}
 
@@ -183,18 +285,12 @@ func GetSubmissionStatus(c *gin.Context) {
 	operatorID := c.Param("operatorId")
 
 	var submission models.Submission
-	if err := database.DB.Where("operator_id = ?", operatorID).First(&submission).Error; err != nil {
+	if err := database.DB.Preload("Problem").Where("operator_id = ?", operatorID).First(&submission).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "找不到該筆評測紀錄"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"operatorId": submission.OperatorID,
-		"status":     submission.Status,
-		"created_at": submission.CreatedAt,
-		"run_time":   submission.RunTime,
-		"run_memory": submission.RunMemory,
-	})
+	c.JSON(http.StatusOK, serializeSubmission(submission))
 }
 
 // GetSubmissionLog godoc
@@ -268,7 +364,13 @@ func GetSubmissions(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "無法取得提交紀錄"})
 		return
 	}
-	c.JSON(http.StatusOK, submissions)
+
+	result := make([]gin.H, 0, len(submissions))
+	for _, submission := range submissions {
+		result = append(result, serializeSubmission(submission))
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 // GetUserSubmissions godoc
@@ -293,7 +395,29 @@ func GetUserSubmissions(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, submissions)
+	result := make([]gin.H, 0, len(submissions))
+	for _, submission := range submissions {
+		result = append(result, serializeSubmission(submission))
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func serializeSubmission(submission models.Submission) gin.H {
+	return gin.H{
+		"operatorId":  submission.OperatorID,
+		"operator_id": submission.OperatorID,
+		"problem_id":  submission.ProblemID,
+		"status":      submission.Status,
+		"created_at":  submission.CreatedAt,
+		"updated_at":  submission.UpdatedAt,
+		"run_time":    submission.RunTime,
+		"run_memory":  submission.RunMemory,
+		"Problem": gin.H{
+			"id":    submission.Problem.ID,
+			"title": submission.Problem.Title,
+		},
+	}
 }
 
 // GetSubmissionSource godoc

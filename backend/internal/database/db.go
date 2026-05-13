@@ -40,21 +40,80 @@ func syncProblemsFromFolder(baseDir string) {
 		return
 	}
 
+	existingProblemIDs := make(map[string]bool)
 	count := 0
-	for _, entry := range entries {
-		if entry.IsDir() {
-			problemID := entry.Name()
 
-			problem := models.Problem{
-				ID:           problemID,
-				Title:        "自動匯入: " + problemID,
-				TestcasePath: filepath.Join(baseDir, problemID),
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		problemID := entry.Name()
+		problemPath := filepath.Join(baseDir, problemID)
+
+		if _, err := os.Stat(filepath.Join(problemPath, "CMakeLists.txt")); err != nil {
+			fmt.Printf("略過題目 '%s'：缺少 CMakeLists.txt\n", problemID)
+			continue
+		}
+
+		existingProblemIDs[problemID] = true
+
+		var problem models.Problem
+		err := DB.Unscoped().Where("id = ?", problemID).First(&problem).Error
+		if err == nil {
+			updates := map[string]interface{}{
+				"testcase_path": problemPath,
+				"is_visible":    true,
+				"deleted_at":    nil,
 			}
 
-			DB.FirstOrCreate(&problem, models.Problem{ID: problemID})
-			count++
+			if problem.Title == "" {
+				updates["title"] = problemID
+			}
+
+			if err := DB.Unscoped().Model(&problem).Updates(updates).Error; err != nil {
+				fmt.Printf("更新題目 '%s' 失敗: %v\n", problemID, err)
+				continue
+			}
+		} else if err == gorm.ErrRecordNotFound {
+			problem = models.Problem{
+				ID:           problemID,
+				Title:        problemID,
+				TestcasePath: problemPath,
+				IsVisible:    true,
+			}
+
+			if err := DB.Create(&problem).Error; err != nil {
+				fmt.Printf("建立題目 '%s' 失敗: %v\n", problemID, err)
+				continue
+			}
+		} else {
+			fmt.Printf("查詢題目 '%s' 失敗: %v\n", problemID, err)
+			continue
+		}
+
+		count++
+	}
+
+	var dbProblems []models.Problem
+	if err := DB.Find(&dbProblems).Error; err != nil {
+		fmt.Printf("讀取資料庫題目列表失敗: %v\n", err)
+		return
+	}
+
+	hiddenCount := 0
+	for _, problem := range dbProblems {
+		if !existingProblemIDs[problem.ID] {
+			if err := DB.Model(&models.Problem{}).
+				Where("id = ?", problem.ID).
+				Update("is_visible", false).Error; err != nil {
+				fmt.Printf("隱藏已不存在的題目 '%s' 失敗: %v\n", problem.ID, err)
+				continue
+			}
+
+			hiddenCount++
 		}
 	}
 
-	fmt.Printf("題目初始化完成！共從 '%s' 載入 %d 題。\n", baseDir, count)
+	fmt.Printf("題目初始化完成！從 '%s' 載入 %d 題，隱藏 %d 題不存在的題目。\n", baseDir, count, hiddenCount)
 }

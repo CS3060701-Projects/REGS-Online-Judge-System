@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { api } from "../lib/api";
 import type { Submission } from "../types";
 
@@ -8,6 +8,20 @@ export function SubmissionsPage() {
   const [single, setSingle] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const hasRunningSubmission = items.some((s) =>
+    ["Pending", "Compiling", "Judging"].includes(s.status)
+  );
+
+  useEffect(() => {
+    if (!hasRunningSubmission) return;
+
+    const timer = window.setInterval(() => {
+      void loadMine();
+    }, 2000);
+
+    return () => window.clearInterval(timer);
+  }, [hasRunningSubmission]);
 
   const getStatusClass = (status: string) => {
     if (status === "AC") return "status-pill status-ac";
@@ -30,6 +44,10 @@ export function SubmissionsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    void loadMine();
+  }, []);
 
   const queryOne = async (e: FormEvent) => {
     e.preventDefault();

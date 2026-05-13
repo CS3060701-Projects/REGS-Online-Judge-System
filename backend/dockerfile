@@ -2,15 +2,25 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    ninja-build \
-    time \
+RUN apt-get update && apt-get install -y \
     ca-certificates \
+    gpg \
+    wget \
+    software-properties-common \
+    build-essential \
+    ninja-build \
+    git \
+    unzip \
+    time \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null \
+    | gpg --dearmor - \
+    | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null \
+    && echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ noble main" \
+    > /etc/apt/sources.list.d/kitware.list \
+    && apt-get update \
+    && apt-get install -y cmake \
+    && rm -rf /var/lib/apt/lists/*
 
-# 預設執行指令 (可選)
-CMD ["/bin/bash"]
+WORKDIR /workspace

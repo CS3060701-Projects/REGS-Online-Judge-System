@@ -83,8 +83,7 @@ func main() {
 			auth.GET("/submissions/:operatorId/logs/:type", handlers.GetSubmissionLog)
 			auth.GET("/users/me", handlers.GetMe)
 
-			// Admin-only routes
-			admin := auth.Group("/")
+			// Admin-only routes			admin := auth.Group("/")
 			admin.Use(middleware.AuthMiddleware("Admin"))
 			{
 				admin.PUT("/problems", handlers.CreateProblem)

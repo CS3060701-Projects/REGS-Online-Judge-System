@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="5"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-05-31T16:54:49"
+	>
+	<testcase name="case1" classname="case1" time="0.0041948" status="run">
+		<properties/>
+		<system-out>Valid: 00732b91df295f086c953e61553af304bc49f2ec228d452383bbe74c4aa11180
+Suite: case: h264-mp4 convert
+Suite: case: vp8-mp4 convert
+Has 5 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case2" classname="case2" time="0.00416529" status="run">
+		<properties/>
+		<system-out>Valid: 462731f864774ec96589a878be3f1efba4caa3f3f40976e7152456c399a39527
+Suite: case: vp9-MKV convert
+Suite: case: h265-MKV convert
+Has 5 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case3" classname="case3" time="0.00427205" status="run">
+		<properties/>
+		<system-out>Valid: f7f97cf3705730398241e86eb5ca592bcbe8553dbaf8a3622ddc7f0e0edc7b08
+Suite: case: h266-flv convert
+Suite: case: av1-flv convert
+Has 5 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case4" classname="case4" time="0.0039812" status="run">
+		<properties/>
+		<system-out>Valid: c3396dbc91d6f861d4a826ec3dbc1740a743f6d0c22a0522bea1769397ca470d
+Suite: case: custom filter corruption
+Has 3 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case5" classname="case5" time="0.00413068" status="run">
+		<properties/>
+		<system-out>Valid: e6c6884cb4e9d9037872c152fefbff9965d73cc03ddb4d3ce552aab7a793048a
+Suite: case: h264-mp4 convert
+Suite: case: vp8-mp4 convert
+Suite: case: vp9-MKV convert
+Suite: case: h265-MKV convert
+Suite: case: h266-flv convert
+Suite: case: av1-flv convert
+Suite: case: custom filter corruption
+Has 18 Checkpoint, PASSED
+</system-out>
+	</testcase>
+</testsuite>

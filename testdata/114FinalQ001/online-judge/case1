@@ -1,0 +1,4 @@
+Valid: 00732b91df295f086c953e61553af304bc49f2ec228d452383bbe74c4aa11180
+Suite: case: h264-mp4 convert
+Suite: case: vp8-mp4 convert
+Has 5 Checkpoint, PASSED

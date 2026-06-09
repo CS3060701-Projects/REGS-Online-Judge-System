@@ -1,0 +1,105 @@
+package database
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+
+	"regs-backend/internal/models"
+	"regs-backend/internal/problem"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+var DB *gorm.DB
+
+func Connect() {
+	dsn := "host=localhost user=regs_user password=regs_password dbname=regs_db port=5433 sslmode=disable TimeZone=Asia/Taipei"
+
+	var err error
+	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatal("無法連線到資料庫:", err)
+	}
+
+	fmt.Println("成功連線到 PostgreSQL!")
+
+	err = DB.AutoMigrate(
+		&models.User{},
+		&models.Problem{},
+		&models.Submission{},
+		&models.JwtBlacklist{},
+	)
+	if err != nil {
+		log.Fatal("資料庫遷移失敗:", err)
+	}
+	fmt.Println("資料庫遷移完成!")
+
+	syncProblemsFromFolder("testdata")
+}
+
+func syncProblemsFromFolder(baseDir string) {
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		fmt.Printf("無法讀取題目目錄 '%s' (%v)。請確認資料夾存在。\n", baseDir, err)
+		return
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		problemID := entry.Name()
+		problemRoot := filepath.Join(baseDir, problemID)
+
+		record := models.Problem{
+			ID:           problemID,
+			Title:        "自動匯入: " + problemID,
+			TestcasePath: problemRoot,
+			IsVisible:    true,
+			TimeLimit:    1000,
+			MemoryLimit:  512,
+		}
+
+		if settings, err := problem.LoadSettings(problemRoot); err == nil {
+			if settings.Title != "" {
+				record.Title = settings.Title
+			}
+			if settings.Limits.TotalTime > 0 {
+				record.TimeLimit = settings.Limits.TotalTime
+			} else if settings.Limits.CpuTime > 0 {
+				record.TimeLimit = settings.Limits.CpuTime
+			}
+			record.MemoryLimit = problem.MemoryLimitMB(settings.Limits.Memory)
+			if settings.Description != "" {
+				record.Description = settings.Description
+			}
+		}
+
+		if readme, err := os.ReadFile(filepath.Join(problemRoot, "README.md")); err == nil {
+			if record.Description == "" {
+				record.Description = string(readme)
+			}
+		}
+
+		var existing models.Problem
+		if err := DB.Where("id = ?", problemID).First(&existing).Error; err == nil {
+			DB.Model(&existing).Updates(map[string]interface{}{
+				"title":         record.Title,
+				"description":   record.Description,
+				"time_limit":    record.TimeLimit,
+				"memory_limit":  record.MemoryLimit,
+				"testcase_path": record.TestcasePath,
+			})
+		} else {
+			DB.Create(&record)
+		}
+		count++
+	}
+
+	fmt.Printf("題目初始化完成！共從 '%s' 載入 %d 題。\n", baseDir, count)
+}

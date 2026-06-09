@@ -13,4 +13,4 @@ pgdata/
 .DS_Store
 Thumbs.db
 node_modules/
-frontend/dist/
+114-framework/

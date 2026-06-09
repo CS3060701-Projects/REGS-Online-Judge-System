@@ -123,7 +123,7 @@ regs-backend/
 
 - `docs/openapi.yaml`：OpenAPI 3.0 API 文件
 - `docs/swagger.yaml`：Swagger 2.0（相容用）
-- `docs/erd.md`：資料庫 ERD
+- `ERD實體關聯圖.md`：資料庫 ERD 與 RBAC 說明
 - `docs/OPERATION.md`：專案操作說明
 
 ## 輔助腳本

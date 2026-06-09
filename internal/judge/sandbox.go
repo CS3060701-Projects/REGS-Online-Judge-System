@@ -73,7 +73,7 @@ func RunAndJudgeWithSettings(operatorID string, workspace string, prob models.Pr
 		fmt.Printf("[%s] === Preset %d (score=%d) ===\n", operatorID, i+1, preset.Score)
 		logFile.WriteString(fmt.Sprintf("\n=== Preset %d (score=%d) ===\n", i+1, preset.Score))
 
-		result := runSinglePreset(operatorID, workspace, absProblemRoot, prob, preset, i, logFile)
+		result := runSinglePreset(operatorID, workspace, absProblemRoot, prob, settings, preset, i, logFile)
 		presetResults = append(presetResults, result)
 
 		if result.Status == "AC" {
@@ -101,6 +101,10 @@ func RunAndJudgeWithSettings(operatorID string, workspace string, prob models.Pr
 
 	fmt.Printf("[%s] 評測完成: 狀態=%s, 得分=%d/%d\n", operatorID, overallStatus, earnedScore, totalScore)
 
+	// 將各 preset 的 configure.log 與 compile.log 合併至 workspace 根目錄
+	// 確保 GET /submissions/{id}/logs/configure 與 /compile 在 settings.yaml 流程下也能正常回傳
+	mergePresetLogs(workspace, len(settings.Presets))
+
 	return models.JudgeResult{
 		Status:        overallStatus,
 		PeakTime:      maxTime,
@@ -111,8 +115,53 @@ func RunAndJudgeWithSettings(operatorID string, workspace string, prob models.Pr
 	}
 }
 
+// mergePresetLogs 將各 preset_N/ 子目錄的 configure.log 與 compile.log
+// 合併後寫入 workspace 根目錄，確保 log API 在 settings.yaml 流程下能正常查詢。
+// 同時也建立 config.log（configure.log 的別名）以符合規格書要求。
+func mergePresetLogs(workspace string, presetCount int) {
+	type logEntry struct {
+		filename string
+		dest     string
+		alias    string // 若不為空則同時複製一份別名
+	}
+	entries := []logEntry{
+		{filename: "configure.log", dest: "configure.log", alias: "config.log"},
+		{filename: "compile.log", dest: "compile.log"},
+	}
+
+	for _, entry := range entries {
+		destPath := filepath.Join(workspace, entry.dest)
+		f, err := os.Create(destPath)
+		if err != nil {
+			fmt.Printf("[mergePresetLogs] 無法建立 %s: %v\n", entry.dest, err)
+			continue
+		}
+
+		for i := 0; i < presetCount; i++ {
+			srcPath := filepath.Join(workspace, fmt.Sprintf("preset_%d", i), entry.filename)
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				// 該 preset 可能在 configure 階段就失敗，log 可能不存在，略過
+				continue
+			}
+			f.WriteString(fmt.Sprintf("=== Preset %d ===\n", i+1))
+			f.Write(data)
+			f.WriteString("\n")
+		}
+		f.Close()
+
+		// 建立別名（config.log → configure.log）
+		if entry.alias != "" {
+			aliasPath := filepath.Join(workspace, entry.alias)
+			if data, err := os.ReadFile(destPath); err == nil {
+				_ = os.WriteFile(aliasPath, data, 0644)
+			}
+		}
+	}
+}
+
 // runSinglePreset 執行單一 preset 的完整流程：prepare → configure → build → run → compare
-func runSinglePreset(operatorID string, workspace string, absProblemRoot string, prob models.Problem, preset problem.Preset, index int, logFile *os.File) models.PresetResult {
+func runSinglePreset(operatorID string, workspace string, absProblemRoot string, prob models.Problem, settings *problem.Settings, preset problem.Preset, index int, logFile *os.File) models.PresetResult {
 	result := models.PresetResult{
 		Index: index,
 		Score: preset.Score,
@@ -188,24 +237,23 @@ func runSinglePreset(operatorID string, workspace string, absProblemRoot string,
 	}
 
 	// 6. 執行程式並捕獲輸出
-	timeout := time.Duration(prob.TimeLimit*10) * time.Millisecond
+	// 使用 settings.yaml 的 limits.totalTime（毫秒）
+	timeoutMs := settings.Limits.TotalTime
+	if timeoutMs <= 0 {
+		timeoutMs = prob.TimeLimit
+	}
+	timeout := time.Duration(timeoutMs*10) * time.Millisecond
 	if timeout < 10*time.Second {
 		timeout = 10 * time.Second
 	}
 
-	// 使用 settings.yaml 的 limits
-	if settings, err := problem.LoadSettings(filepath.Dir(absProblemRoot+"/.")); err == nil {
-		if settings.Limits.TotalTime > 0 {
-			timeout = time.Duration(settings.Limits.TotalTime*10) * time.Millisecond
-			if timeout < 10*time.Second {
-				timeout = 10 * time.Second
-			}
+	// 使用 settings.yaml 的 limits.memory（KB → MB）
+	memLimit := problem.MemoryLimitMB(settings.Limits.Memory)
+	if settings.Limits.Memory <= 0 {
+		memLimit = prob.MemoryLimit
+		if memLimit <= 0 {
+			memLimit = 256
 		}
-	}
-
-	memLimit := prob.MemoryLimit
-	if memLimit <= 0 {
-		memLimit = 256
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -334,30 +382,27 @@ func copyUploadFiles(srcWorkspace, dstDir string) error {
 	})
 }
 
-// extractProgramOutput 從 ctest -V 的輸出中提取程式的實際輸出
-// ctest -V 會輸出很多框架訊息，程式的 stdout 通常在 "test output" 區段中
+// extractProgramOutput 從 ctest -V 的輸出中提取第一個測試的實際輸出
+// ctest -V 格式中，每行程式輸出都帶有測試編號前綴，例如 "1: Valid: xxx"
+// 此函式只提取第一個測試的輸出，並去除 "N: " 前綴
 func extractProgramOutput(ctestOutput string) string {
 	lines := strings.Split(ctestOutput, "\n")
 	var programLines []string
 	inOutput := false
+	firstTestNum := ""
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
-		// ctest -V 輸出格式：
-		// "N: Test command: ..."
-		// "N: Working Directory: ..."
-		// "N: Test timeout computed to be: ..."
-		// 然後是程式的實際輸出
-		// 最後是 "N/N Test #N: ... Passed/Failed ..."
-
 		// 偵測程式輸出開始（在 "Test timeout computed" 之後）
 		if strings.Contains(trimmed, "Test timeout computed to be:") {
-			inOutput = true
+			if firstTestNum == "" {
+				inOutput = true
+			}
 			continue
 		}
 
-		// 偵測程式輸出結束（ctest 的結果行）
+		// 偵測程式輸出結束（ctest 的結果行或下一個測試開始）
 		if inOutput && (strings.Contains(trimmed, "Test #") ||
 			strings.Contains(trimmed, "% tests passed") ||
 			strings.Contains(trimmed, "Total Test time") ||
@@ -369,11 +414,82 @@ func extractProgramOutput(ctestOutput string) string {
 		}
 
 		if inOutput && trimmed != "" {
-			programLines = append(programLines, trimmed)
+			// 去除 ctest -V 的行號前綴 "N: "（例如 "1: Valid: xxx" → "Valid: xxx"）
+			cleaned := stripCtestPrefix(trimmed)
+
+			// 確定第一個測試的編號
+			if firstTestNum == "" {
+				prefix := extractCtestPrefix(trimmed)
+				if prefix != "" {
+					firstTestNum = prefix
+				}
+			}
+
+			// 只保留第一個測試的輸出
+			if firstTestNum != "" {
+				prefix := extractCtestPrefix(trimmed)
+				if prefix != "" && prefix != firstTestNum {
+					// 這是其他測試的輸出，跳過
+					continue
+				}
+			}
+
+			programLines = append(programLines, cleaned)
 		}
 	}
 
 	return strings.Join(programLines, "\n")
+}
+
+// stripCtestPrefix 去除 ctest -V 的 "N: " 前綴
+// 例如 "1: Valid: xxx" → "Valid: xxx"
+// 如果沒有前綴則原樣返回
+func stripCtestPrefix(line string) string {
+	// ctest 前綴格式: "數字: "
+	for i, ch := range line {
+		if ch == ':' && i > 0 {
+			// 檢查冒號前面是否全部是數字
+			allDigits := true
+			for _, d := range line[:i] {
+				if d < '0' || d > '9' {
+					allDigits = false
+					break
+				}
+			}
+			if allDigits && i+1 < len(line) && line[i+1] == ' ' {
+				return line[i+2:]
+			}
+			break
+		}
+		if ch < '0' || ch > '9' {
+			break
+		}
+	}
+	return line
+}
+
+// extractCtestPrefix 提取 ctest -V 的測試編號前綴
+// 例如 "1: Valid: xxx" → "1"，無前綴返回 ""
+func extractCtestPrefix(line string) string {
+	for i, ch := range line {
+		if ch == ':' && i > 0 {
+			allDigits := true
+			for _, d := range line[:i] {
+				if d < '0' || d > '9' {
+					allDigits = false
+					break
+				}
+			}
+			if allDigits && i+1 < len(line) && line[i+1] == ' ' {
+				return line[:i]
+			}
+			break
+		}
+		if ch < '0' || ch > '9' {
+			break
+		}
+	}
+	return ""
 }
 
 // compareOutput 逐行比對兩個輸出（忽略尾部空白和 \r）

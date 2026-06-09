@@ -13,147 +13,180 @@ import (
 )
 
 func RunAndJudge(operatorID string, workspace string, problem models.Problem) models.JudgeResult {
-	absWorkspace, _ := filepath.Abs(workspace)
-	absTestData, _ := filepath.Abs(filepath.Join("testdata", problem.ID))
+	problemRoot := problem.TestcasePath
+	if problemRoot == "" {
+		problemRoot = filepath.Join("testdata", problem.ID)
+	}
 
-	testCases, _ := filepath.Glob(filepath.Join(absTestData, "*.in"))
-	if len(testCases) == 0 {
+	cmakePath := filepath.Join(problemRoot, "CMakeLists.txt")
+	if _, err := os.Stat(cmakePath); err != nil {
+		fmt.Printf("[%s] 題目資料夾缺少 CMakeLists.txt: %s\n", operatorID, cmakePath)
 		return models.JudgeResult{Status: "SE"}
 	}
 
-	var peakTime float64
-	var peakMemory int64
-	outputLogPath := filepath.Join(workspace, "output.log")
-	os.Remove(outputLogPath)
-
-	logFile, _ := os.OpenFile(outputLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	defer logFile.Close()
-
-	for _, inputPath := range testCases {
-		testName := strings.TrimSuffix(filepath.Base(inputPath), ".in")
-		expectedPath := strings.TrimSuffix(inputPath, ".in") + ".out"
-
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(problem.TimeLimit)*time.Millisecond)
-		defer cancel()
-
-		cmdRun := exec.CommandContext(ctx, "docker", "run", "--rm", "-i",
-			"--network", "none",
-			"--cpus", "1.0",
-			"--memory", fmt.Sprintf("%dm", problem.MemoryLimit),
-			"-v", fmt.Sprintf("%s:/app", absWorkspace),
-			"-w", "/app",
-			models.JUDGER_IMAGE,
-			"/usr/bin/time", "-f", "METRIC:%e:%M", "./build/main",
-		)
-
-		inFile, _ := os.Open(inputPath)
-		var stdoutBuf, stderrBuf bytes.Buffer
-		cmdRun.Stdin = inFile
-		cmdRun.Stdout = &stdoutBuf
-		cmdRun.Stderr = &stderrBuf
-
-		runErr := cmdRun.Run()
-		inFile.Close()
-
-		var currentTime float64
-		var currentMemory int64
-		for _, line := range strings.Split(stderrBuf.String(), "\n") {
-			if strings.Contains(line, "METRIC:") {
-				fmt.Sscanf(strings.TrimSpace(line), "METRIC:%f:%d", &currentTime, &currentMemory)
-			}
-		}
-		if currentTime > peakTime {
-			peakTime = currentTime
-		}
-		if currentMemory > peakMemory {
-			peakMemory = currentMemory
-		}
-
-		logFile.WriteString(fmt.Sprintf("=== Test %s (%.3fs, %d KB) ===\n", testName, currentTime, currentMemory))
-		logFile.Write(stdoutBuf.Bytes())
-		logFile.WriteString("\n")
-
-		if ctx.Err() == context.DeadlineExceeded {
-			return models.JudgeResult{Status: "TLE", PeakTime: peakTime, PeakMemory: peakMemory}
-		}
-		if runErr != nil {
-			return models.JudgeResult{Status: "RE", PeakTime: peakTime, PeakMemory: peakMemory}
-		}
-
-		expectedOut, _ := os.ReadFile(expectedPath)
-		if strings.TrimSpace(stdoutBuf.String()) != strings.TrimSpace(string(expectedOut)) {
-			return models.JudgeResult{Status: "WA", PeakTime: peakTime, PeakMemory: peakMemory}
-		}
-	}
-
-	return models.JudgeResult{Status: "AC", PeakTime: peakTime, PeakMemory: peakMemory}
+	return RunAndJudgeCTest(operatorID, workspace, problem)
 }
 
-func cleanString(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	s = strings.ReplaceAll(s, "\r", "")
-	return strings.TrimSpace(s)
-}
-
-func CompileProject(operatorID string, workspace string) string {
+func RunAndJudgeCTest(operatorID string, workspace string, problem models.Problem) models.JudgeResult {
 	absWorkspace, err := filepath.Abs(workspace)
 	if err != nil {
-		fmt.Printf("[%s] 取得絕對路徑失敗: %v\n", operatorID, err)
-		return "SE"
+		fmt.Printf("[%s] 無法取得 workspace 絕對路徑: %v\n", operatorID, err)
+		return models.JudgeResult{Status: "SE"}
 	}
 	absWorkspace = filepath.ToSlash(absWorkspace)
 
-	buildPath := filepath.Join(workspace, "build")
-	if err := os.RemoveAll(buildPath); err != nil {
-		fmt.Printf("[%s] 清理舊編譯目錄失敗: %v\n", operatorID, err)
+	problemRoot := problem.TestcasePath
+	if problemRoot == "" {
+		problemRoot = filepath.Join("testdata", problem.ID)
 	}
 
-	fmt.Printf("[%s] 開始編譯流程，Workspace: %s\n", operatorID, absWorkspace)
+	absProblemRoot, err := filepath.Abs(problemRoot)
+	if err != nil {
+		fmt.Printf("[%s] 無法取得題目根目錄絕對路徑: %v\n", operatorID, err)
+		return models.JudgeResult{Status: "SE"}
+	}
+	absProblemRoot = filepath.ToSlash(absProblemRoot)
 
-	configLogPath := filepath.Join(workspace, "configure.log")
-	configLog, _ := os.Create(configLogPath)
+	outputLogPath := filepath.Join(workspace, "output.log")
+	os.Remove(outputLogPath)
+
+	logFile, err := os.OpenFile(outputLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Printf("[%s] 無法建立 output.log: %v\n", operatorID, err)
+		return models.JudgeResult{Status: "SE"}
+	}
+	defer logFile.Close()
+
+	timeout := time.Duration(problem.TimeLimit*10) * time.Millisecond
+	if timeout < 10*time.Second {
+		timeout = 10 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmdRun := exec.CommandContext(ctx, "docker", "run", "--rm",
+		"--network", "none",
+		"--cpus", "1.0",
+		"--memory", fmt.Sprintf("%dm", problem.MemoryLimit),
+		"-v", absWorkspace+":/upload",
+		"-v", absProblemRoot+":/problem:ro",
+		"-v", absWorkspace+":/app",
+		"-w", "/app",
+		models.JUDGER_IMAGE,
+		"ctest",
+		"--test-dir", "build",
+		"--output-on-failure",
+		"-V",
+	)
+
+	var stdoutBuf bytes.Buffer
+	cmdRun.Stdout = &stdoutBuf
+	cmdRun.Stderr = &stdoutBuf
+
+	start := time.Now()
+	runErr := cmdRun.Run()
+	elapsed := time.Since(start).Seconds()
+
+	outputStr := stdoutBuf.String()
+
+	fmt.Printf("[%s] CTest 執行結果:\n%s\n", operatorID, outputStr)
+
+	logFile.WriteString("=== CTest Execution ===\n")
+	logFile.Write(stdoutBuf.Bytes())
+	logFile.WriteString("\n")
+
+	if ctx.Err() == context.DeadlineExceeded {
+		return models.JudgeResult{
+			Status:     "TLE",
+			PeakTime:   elapsed,
+			PeakMemory: 0,
+		}
+	}
+
+	if runErr != nil {
+		if strings.Contains(outputStr, "Timeout") ||
+			strings.Contains(outputStr, "TIMEOUT") ||
+			strings.Contains(outputStr, "Test timeout") {
+			return models.JudgeResult{
+				Status:     "TLE",
+				PeakTime:   elapsed,
+				PeakMemory: 0,
+			}
+		}
+
+		if strings.Contains(outputStr, "Segmentation fault") ||
+			strings.Contains(outputStr, "segmentation fault") ||
+			strings.Contains(outputStr, "core dumped") ||
+			strings.Contains(outputStr, "Bus error") ||
+			strings.Contains(outputStr, "Access violation") {
+			return models.JudgeResult{
+				Status:     "RE",
+				PeakTime:   elapsed,
+				PeakMemory: 0,
+			}
+		}
+
+		return models.JudgeResult{
+			Status:     "WA",
+			PeakTime:   elapsed,
+			PeakMemory: 0,
+		}
+	}
+
+	return models.JudgeResult{
+		Status:     "AC",
+		PeakTime:   elapsed,
+		PeakMemory: 0,
+	}
+}
+
+func RunConfigure(absWorkspace, absProblemRoot string, configLogPath string) error {
+	configLog, err := os.Create(configLogPath)
+	if err != nil {
+		return err
+	}
 	defer configLog.Close()
 
-	// cmake -G Ninja -B build
 	cmdConfig := exec.Command("docker", "run", "--rm",
-		"--network", "none",
-		"-v", absWorkspace+":/workspace",
-		"-w", "/workspace",
+		"--network", BuildNetwork,
+		"-v", absWorkspace+":/upload",
+		"-v", absProblemRoot+":/problem:ro",
+		"-v", absWorkspace+":/app",
+		"-w", "/app",
 		models.JUDGER_IMAGE,
-		"cmake", "-G", "Ninja", "-B", "build",
+		"cmake",
+		"-S", "/problem",
+		"-B", "build",
+		"-D", "SOURCE_ROOT=/upload",
+		"-G", "Ninja",
 	)
 
 	cmdConfig.Stdout = configLog
 	cmdConfig.Stderr = configLog
+	return cmdConfig.Run()
+}
 
-	fmt.Printf("[%s] [1/2] 正在執行 CMake Configure...\n", operatorID)
-	if err := cmdConfig.Run(); err != nil {
-		fmt.Printf("[%s] Configure 失敗，請檢查日誌: %s\n", operatorID, configLogPath)
-		return "CE"
+func RunBuild(absWorkspace, absProblemRoot string, compileLogPath string) error {
+	compileLog, err := os.Create(compileLogPath)
+	if err != nil {
+		return err
 	}
-
-	compileLogPath := filepath.Join(workspace, "compile.log")
-	compileLog, _ := os.Create(compileLogPath)
 	defer compileLog.Close()
 
-	// cmake --build build
 	cmdBuild := exec.Command("docker", "run", "--rm",
-		"--network", "none",
-		"-v", absWorkspace+":/workspace",
-		"-w", "/workspace",
+		"--network", BuildNetwork,
+		"-v", absWorkspace+":/upload",
+		"-v", absProblemRoot+":/problem:ro",
+		"-v", absWorkspace+":/app",
+		"-w", "/app",
 		models.JUDGER_IMAGE,
-		"cmake", "--build", "build",
+		"cmake",
+		"--build", "build",
+		"--verbose",
 	)
 
 	cmdBuild.Stdout = compileLog
 	cmdBuild.Stderr = compileLog
-
-	fmt.Printf("[%s] [2/2] 正在執行 CMake Build...\n", operatorID)
-	if err := cmdBuild.Run(); err != nil {
-		fmt.Printf("[%s] Build 失敗，請檢查日誌: %s\n", operatorID, compileLogPath)
-		return "CE"
-	}
-
-	fmt.Printf("[%s] 編譯成功！\n", operatorID)
-	return "Ready"
+	return cmdBuild.Run()
 }

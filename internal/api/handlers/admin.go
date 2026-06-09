@@ -37,28 +37,26 @@ func CreateProblem(c *gin.Context) {
 	err := database.DB.Unscoped().Where("id = ?", problem.ID).First(&existing).Error
 
 	if err == nil {
+		updates := map[string]interface{}{
+			"title":         problem.Title,
+			"description":   problem.Description,
+			"time_limit":    problem.TimeLimit,
+			"memory_limit":  problem.MemoryLimit,
+			"testcase_path": problem.TestcasePath,
+			"is_visible":    problem.IsVisible,
+		}
 		if existing.DeletedAt.Valid {
-			err := database.DB.Unscoped().Model(&existing).Updates(map[string]interface{}{
-				"deleted_at":    nil,
-				"title":         problem.Title,
-				"description":   problem.Description,
-				"time_limit":    problem.TimeLimit,
-				"memory_limit":  problem.MemoryLimit,
-				"testcase_path": problem.TestcasePath,
-				"is_visible":    problem.IsVisible,
-			}).Error
+			updates["deleted_at"] = nil
+		}
 
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "復活舊題目失敗"})
-				return
-			}
-
-			c.JSON(http.StatusOK, gin.H{"message": "已成功覆蓋並重新啟用被刪除的題目", "problem": existing})
-			return
-		} else {
-			c.JSON(http.StatusConflict, gin.H{"error": "題目 ID 已存在且在使用中"})
+		if err := database.DB.Unscoped().Model(&existing).Updates(updates).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新題目失敗"})
 			return
 		}
+
+		database.DB.Unscoped().First(&existing, "id = ?", problem.ID)
+		c.JSON(http.StatusOK, gin.H{"message": "題目已建立或更新", "problem": existing})
+		return
 	}
 
 	if err := database.DB.Create(&problem).Error; err != nil {

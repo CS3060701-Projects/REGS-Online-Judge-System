@@ -6,6 +6,7 @@ import (
 	"regs-backend/internal/api/handlers"
 	"regs-backend/internal/api/middleware"
 	"regs-backend/internal/database"
+	"regs-backend/internal/judge"
 	"regs-backend/internal/models"
 	jwtPkg "regs-backend/pkg/jwt"
 
@@ -42,7 +43,6 @@ func main() {
 		&models.Problem{},
 		&models.JwtBlacklist{},
 	)
-
 	if err != nil {
 		log.Fatalf("資料庫遷移失敗: %v", err)
 	}
@@ -51,15 +51,29 @@ func main() {
 		log.Fatal("JWT 初始化失敗:", err)
 	}
 
-	handlers.InitJudger(3) // initialize 3 judge workers
+	if err := judge.EnsureBuildNetwork(); err != nil {
+		log.Printf("警告: %v", err)
+	}
+
+	handlers.InitJudger(3)
 
 	r := gin.Default()
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, Origin")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	})
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	api := r.Group("/api")
 	{
-		// Public routes (no auth required)
 		api.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 		api.POST("/users/register", handlers.Register)
 		api.POST("/users/login", handlers.Login)
@@ -69,20 +83,18 @@ func main() {
 		api.GET("/stats/problems/:problem_id", handlers.GetProblemStats)
 		api.GET("/stats/users/:user_id", handlers.GetUserStats)
 
-		// Authenticated routes
 		auth := api.Group("/")
 		auth.Use(middleware.AuthMiddleware("User"))
 		{
-			// Routes for any authenticated user (User, Admin)
 			auth.POST("/users/logout", handlers.Logout)
 			auth.POST("/submissions", handlers.SubmitAssignment)
 			auth.GET("/submissions", handlers.GetSubmissions)
 			auth.GET("/submissions/:operatorId", handlers.GetSubmissionStatus)
 			auth.GET("/submissions/:operatorId/source", handlers.GetSubmissionSource)
 			auth.GET("/submissions/:operatorId/logs/:type", handlers.GetSubmissionLog)
+			auth.POST("/submissions/:operatorId/rerun", handlers.RerunSubmission)
 			auth.GET("/users/me", handlers.GetMe)
 
-			// Admin-only routes
 			admin := auth.Group("/")
 			admin.Use(middleware.AuthMiddleware("Admin"))
 			{

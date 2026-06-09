@@ -8,10 +8,22 @@ import (
 
 const JUDGER_IMAGE = "regs-judger"
 
+// PresetResult 記錄單一 preset 的評測結果
+type PresetResult struct {
+	Index    int     `json:"index"`
+	Status   string  `json:"status"`    // AC, WA, CE, RE, TLE, SE
+	Score    int     `json:"score"`     // 該 preset 配分
+	Earned   int     `json:"earned"`    // 實得分數 (AC=score, 其他=0)
+	PeakTime float64 `json:"peak_time"`
+}
+
 type JudgeResult struct {
-	Status     string
-	PeakTime   float64
-	PeakMemory int64
+	Status        string         `json:"status"`
+	PeakTime      float64        `json:"peak_time"`
+	PeakMemory    int64          `json:"peak_memory"`
+	TotalScore    int            `json:"total_score"`
+	EarnedScore   int            `json:"earned_score"`
+	PresetResults []PresetResult `json:"preset_results,omitempty"`
 }
 
 type User struct {
@@ -52,6 +64,9 @@ type Submission struct {
 	Problem   Problem `gorm:"foreignKey:ProblemID"`
 	RunTime   int     `json:"run_time"`
 	RunMemory int64   `json:"run_memory"`
+
+	Score      int `json:"score"`       // 實際得分
+	TotalScore int `json:"total_score"` // 該題滿分
 }
 
 type JwtBlacklist struct {

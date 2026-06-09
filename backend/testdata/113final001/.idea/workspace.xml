@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="ALL" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="747b76c5-8bb4-4b49-b57c-94e50594e603" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/../backend/internal/api/handlers/submission.go" beforeDir="false" afterPath="$PROJECT_DIR$/../backend/internal/api/handlers/submission.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../backend/internal/judge/sandbox.go" beforeDir="false" afterPath="$PROJECT_DIR$/../backend/internal/judge/sandbox.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../backend/testdata/p1001/1.in" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../backend/testdata/p1001/1.out" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../backend/testdata/p1001/1.zip" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../backend/testdata/p1002/1.in" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../backend/testdata/p1002/1.out" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../backend/testdata/p1003/1.in" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../backend/testdata/p1003/1.out" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../backend/testdata/p1003/1.zip" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="18" />
+    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
+  </component>
+  <component name="GOROOT" url="file://$PROJECT_DIR$/../../../../../../../Program Files/Go" />
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 1
+}]]></component>
+  <component name="ProjectId" id="3Df5582dnwuWtzxZXV0uqUUc0Sa" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.GoLinterPluginOnboardingV2": "true",
+    "RunOnceActivity.GoLinterPluginStorageMigration": "true",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.go.analysis.ui.options.defaults": "true",
+    "RunOnceActivity.go.formatter.settings.were.checked": "true",
+    "RunOnceActivity.go.modules.go.list.on.any.changes.was.set": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "git-widget-placeholder": "frontend-dev",
+    "go.sdk.automatically.set": "true",
+    "ignore.virus.scanning.warn.message": "true",
+    "last_opened_file_path": "C:/Users/q0929/OneDrive/文件/GitHub/REGS-Backend/113final001",
+    "settings.editor.selected.configurable": "ml.llm.AIAssistantPromptsLibrary"
+  }
+}]]></component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-gosdk-72a9cf600ed8-dfa3e7267ae0-org.jetbrains.plugins.go.sharedIndexes.bundled-GO-253.31033.129" />
+        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-GO-253.31033.129" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="747b76c5-8bb4-4b49-b57c-94e50594e603" name="Changes" comment="" />
+      <created>1778660098809</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1778660098809</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>

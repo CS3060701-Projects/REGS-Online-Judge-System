@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="5"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-05-31T16:54:50"
+	>
+	<testcase name="case1" classname="case1" time="0.00221532" status="run">
+		<properties/>
+		<system-out>Valid: 84a223ed5fbde2d62433d789b6d78a33069241cde784094f6cc0f168ea6d68eb
+Suite: Parse - single stop
+Has 36 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case2" classname="case2" time="0.00345969" status="run">
+		<properties/>
+		<system-out>Valid: 5c16ad0f149ab0c559acacbf013ebfa4b928efbe1f5acd14a97f59945cc5d7f9
+Suite: Parse - hazards and multi-item
+Has 78 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case3" classname="case3" time="0.0041312" status="run">
+		<properties/>
+		<system-out>Valid: 358a774298ac1e57ac9f2676c9ad5a146d23c07ef0ed930647647fed96d3e121
+Suite: getLocationAt - 3-stop boundary sweep
+Has 150 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case4" classname="case4" time="0.00431544" status="run">
+		<properties/>
+		<system-out>Valid: a6951fc6addc0ca37fd84de0a083834a88a8efed8bc792cb41c6d875e3a012da
+Suite: getExpAt + encode, large values
+Has 204 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case5" classname="case5" time="0.00456834" status="run">
+		<properties/>
+		<system-out>Valid: 59ea4df1fe4318d1f623e9a750b183499be422b73eae3f14d4d93fb3b9f80a1a
+Suite: Full stress - 4 stops, double hazard, 3 items
+Has 294 Checkpoint, PASSED
+</system-out>
+	</testcase>
+</testsuite>

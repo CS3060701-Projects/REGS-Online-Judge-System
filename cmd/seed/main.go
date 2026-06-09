@@ -16,7 +16,7 @@ func main() {
 	fmt.Println("Connecting to the database...")
 	database.Connect()
 
-	fmt.Println("No admin user found. Let's create one.")
+	fmt.Println("Enter credentials for a new admin user.")
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -31,6 +31,13 @@ func main() {
 	if username == "" || password == "" {
 		log.Fatal("Username and password cannot be empty.")
 	}
+
+	var existing int64
+	database.DB.Model(&models.User{}).Where("username = ?", username).Count(&existing)
+	if existing > 0 {
+		log.Fatalf("Username '%s' already exists.", username)
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Fatalf("Failed to hash password: %v", err)

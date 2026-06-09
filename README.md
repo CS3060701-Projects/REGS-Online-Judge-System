@@ -59,12 +59,14 @@ scripts\register_admin.bat
 go run ./cmd/server
 ```
 
-或使用 `Server.bat` / `start_all.bat`。
+或直接執行 `server.bat`。
 
 5. **訪問服務**
 
 - API：`http://localhost:8081`
-- Swagger：`http://localhost:8081/swagger/index.html`
+- OpenAPI 3.0：`http://localhost:8081/openapi.yaml`
+- Redoc：`http://localhost:8081/docs`
+- Swagger UI：`http://localhost:8081/swagger/index.html`
 
 ---
 
@@ -119,7 +121,8 @@ regs-backend/
 
 ## 文件
 
-- `docs/swagger.yaml`：OpenAPI 3.0 API 文件
+- `docs/openapi.yaml`：OpenAPI 3.0 API 文件
+- `docs/swagger.yaml`：Swagger 2.0（相容用）
 - `docs/erd.md`：資料庫 ERD
 - `docs/OPERATION.md`：專案操作說明
 

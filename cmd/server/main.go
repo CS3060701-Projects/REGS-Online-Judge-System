@@ -7,7 +7,6 @@ import (
 	"regs-backend/internal/api/middleware"
 	"regs-backend/internal/database"
 	"regs-backend/internal/judge"
-	"regs-backend/internal/models"
 	jwtPkg "regs-backend/pkg/jwt"
 
 	_ "regs-backend/docs"
@@ -21,14 +20,6 @@ import (
 // @version 1.0
 // @openapi 3.0.0
 // @description This is the API server for the REGS Online Judge system.
-// @termsOfService http://swagger.io/terms/
-
-// @contact.name API Support
-// @contact.url https://github.com/your-repo
-
-// @license.name MIT
-// @license.url https://opensource.org/licenses/MIT
-
 // @host localhost:8081
 // @BasePath /api
 // @securityDefinitions.apikey ApiKeyAuth
@@ -36,16 +27,6 @@ import (
 // @name Authorization
 func main() {
 	database.Connect()
-
-	err := database.DB.AutoMigrate(
-		&models.Submission{},
-		&models.User{},
-		&models.Problem{},
-		&models.JwtBlacklist{},
-	)
-	if err != nil {
-		log.Fatalf("資料庫遷移失敗: %v", err)
-	}
 
 	if err := jwtPkg.InitKeys(); err != nil {
 		log.Fatal("JWT 初始化失敗:", err)
@@ -70,18 +51,35 @@ func main() {
 		c.Next()
 	})
 
+	r.StaticFile("/openapi.yaml", "./docs/openapi.yaml")
+	r.GET("/docs", func(c *gin.Context) {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.String(http.StatusOK, `<!DOCTYPE html>
+<html><head><title>REGS API Docs</title>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/redoc@2.4.0/bundles/redoc.standalone.css"/>
+</head><body>
+<redoc spec-url="/openapi.yaml"></redoc>
+<script src="https://cdn.jsdelivr.net/npm/redoc@2.4.0/bundles/redoc.standalone.js"></script>
+</body></html>`)
+	})
+
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	api := r.Group("/api")
 	{
-		api.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
-		api.POST("/users/register", handlers.Register)
-		api.POST("/users/login", handlers.Login)
-		api.GET("/problems", handlers.GetProblems)
-		api.GET("/problems/:id", handlers.GetProblem)
-		api.GET("/users/:user_id/submissions", handlers.GetUserSubmissions)
-		api.GET("/stats/problems/:problem_id", handlers.GetProblemStats)
-		api.GET("/stats/users/:user_id", handlers.GetUserStats)
+		public := api.Group("/")
+		public.Use(middleware.OptionalAuthMiddleware())
+		{
+			public.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
+			public.POST("/users/register", handlers.Register)
+			public.POST("/users/login", handlers.Login)
+			public.GET("/problems", handlers.GetProblems)
+			public.GET("/problems/:id", handlers.GetProblem)
+			public.GET("/users/:user_id/submissions", handlers.GetUserSubmissions)
+			public.GET("/stats/problems/:problem_id", handlers.GetProblemStats)
+			public.GET("/stats/users/:user_id", handlers.GetUserStats)
+		}
 
 		auth := api.Group("/")
 		auth.Use(middleware.AuthMiddleware("User"))

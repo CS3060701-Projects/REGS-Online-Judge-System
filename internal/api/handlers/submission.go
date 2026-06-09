@@ -81,13 +81,13 @@ func SubmitAssignment(c *gin.Context) {
 		return
 	}
 
-	if !hasCMakeLists(workspace) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "上傳的專案根目錄缺少 CMakeLists.txt"})
+	if err := ensureCMakeProject(workspace, problem); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err := replaceUploadedEntrypointWithProblemEntrypoint(workspace, problem); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "替換官方 entrypoint.cpp 失敗"})
+	if err := injectOfficialProblemFiles(workspace, problem); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "注入官方評測檔案失敗: " + err.Error()})
 		return
 	}
 
@@ -114,48 +114,6 @@ func SubmitAssignment(c *gin.Context) {
 		"operatorId": operatorID,
 		"userId":     uID,
 	})
-}
-
-func replaceUploadedEntrypointWithProblemEntrypoint(workspace string, problem models.Problem) error {
-	problemRoot := problem.TestcasePath
-	if problemRoot == "" {
-		problemRoot = filepath.Join("testdata", problem.ID)
-	}
-
-	problemEntrypointPath := filepath.Join(problemRoot, "solution", "entrypoint.cpp")
-	if _, err := os.Stat(problemEntrypointPath); err != nil {
-		return fmt.Errorf("題目官方 entrypoint.cpp 不存在: %s", problemEntrypointPath)
-	}
-
-	if err := filepath.WalkDir(workspace, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if strings.EqualFold(d.Name(), "entrypoint.cpp") {
-			if err := os.Remove(path); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	officialEntrypoint, err := os.ReadFile(problemEntrypointPath)
-	if err != nil {
-		return err
-	}
-
-	workspaceEntrypointPath := filepath.Join(workspace, "entrypoint.cpp")
-	return os.WriteFile(workspaceEntrypointPath, officialEntrypoint, 0644)
-}
-
-func hasCMakeLists(workspace string) bool {
-	_, err := os.Stat(filepath.Join(workspace, "CMakeLists.txt"))
-	return err == nil
 }
 
 func canAccessSubmission(submission models.Submission, currentUID uint, currentRole string) bool {
@@ -215,6 +173,7 @@ func processSubmission(operatorID, workspace, problemID string) {
 		fmt.Printf("[%s] Configure 失敗，請檢查 configure.log. Error: %v\n", operatorID, err)
 		return
 	}
+	mirrorConfigLog(workspace)
 
 	compileLogPath := filepath.Join(workspace, "compile.log")
 	if err := judge.RunBuild(absWorkspace, absProblemRoot, compileLogPath); err != nil {
@@ -319,6 +278,8 @@ func GetSubmissionLog(c *gin.Context) {
 	switch logType {
 	case "configure":
 		fileName = "configure.log"
+	case "config":
+		fileName = "config.log"
 	case "compile":
 		fileName = "compile.log"
 	case "output":
@@ -330,8 +291,13 @@ func GetSubmissionLog(c *gin.Context) {
 
 	logPath := filepath.Join("storage", "workspaces", operatorID, fileName)
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "找不到指定的日誌檔案"})
-		return
+		if logType == "config" {
+			logPath = filepath.Join("storage", "workspaces", operatorID, "configure.log")
+		}
+		if _, err := os.Stat(logPath); os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "找不到指定的日誌檔案"})
+			return
+		}
 	}
 
 	c.File(logPath)

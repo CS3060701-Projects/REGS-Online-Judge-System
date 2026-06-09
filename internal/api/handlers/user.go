@@ -117,8 +117,8 @@ func Login(c *gin.Context) {
 // @Router /users/logout [post]
 func Logout(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
-	if len(authHeader) < 7 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "無效的請求標頭"})
+	if len(authHeader) < 8 || authHeader[:7] != "Bearer " {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "無效的請求標頭，請使用 Bearer <token>"})
 		return
 	}
 	tokenString := authHeader[7:]

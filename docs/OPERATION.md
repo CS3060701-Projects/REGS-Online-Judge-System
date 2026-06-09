@@ -7,7 +7,13 @@
 3. 建立評測映像：`docker build -t regs-judger -f dockerfile .`
 4. 確認 `private.pem` / `public.pem` 存在（或使用 openssl 重新生成）
 5. 建立管理員：`scripts\register_admin.bat`
-6. 啟動伺服器：`go run ./cmd/server`
+6. 啟動伺服器：`go run ./cmd/server` 或 `server.bat`
+
+## API 文件
+
+- OpenAPI 3.0：`http://localhost:8081/openapi.yaml`
+- Redoc 文件頁：`http://localhost:8081/docs`
+- Swagger UI（相容）：`http://localhost:8081/swagger/index.html`
 
 ## 評測容器說明
 
@@ -32,10 +38,6 @@
 4. DELETE `/api/problems/{id}` 刪除題目
 
 題目測資預設放在 `testdata/{problem_id}/`，需包含根目錄 `CMakeLists.txt` 與 `solution/`、`spec/` 等結構。
-
-## 測試資料
-
-`backend/testdata/` 內含 `113final001` ~ `113final006` 範例題目，可作為本地評測測試。
 
 ## 常見問題
 

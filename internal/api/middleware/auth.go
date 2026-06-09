@@ -1,13 +1,67 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"regs-backend/internal/database"
 	"regs-backend/internal/models"
 	jwtPkg "regs-backend/pkg/jwt"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
+
+func parseBearerToken(authHeader string) (string, bool) {
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return "", false
+	}
+	token := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+	return token, token != ""
+}
+
+func authenticateToken(tokenString string) (*jwtPkg.Claims, error) {
+	claims, err := jwtPkg.ParseToken(tokenString)
+	if err != nil {
+		return nil, err
+	}
+
+	var blacklisted models.JwtBlacklist
+	result := database.DB.Where("token = ?", tokenString).Limit(1).Find(&blacklisted)
+	if result.RowsAffected > 0 {
+		return nil, errors.New("token blacklisted")
+	}
+
+	return claims, nil
+}
+
+// OptionalAuthMiddleware validates Authorization when present (Guest routes).
+func OptionalAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.Next()
+			return
+		}
+
+		tokenString, ok := parseBearerToken(authHeader)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "無效的認證格式，請使用 Bearer <token>"})
+			c.Abort()
+			return
+		}
+
+		claims, err := authenticateToken(tokenString)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "無效的 Token"})
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", claims.UserID)
+		c.Set("role", claims.Role)
+		c.Next()
+	}
+}
 
 func AuthMiddleware(requiredRole string) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -23,25 +77,16 @@ func AuthMiddleware(requiredRole string) gin.HandlerFunc {
 			return
 		}
 
-		if len(authHeader) < 7 {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "無效的認證格式"})
+		tokenString, ok := parseBearerToken(authHeader)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "無效的認證格式，請使用 Bearer <token>"})
 			c.Abort()
 			return
 		}
-		tokenString := authHeader[7:]
 
-		claims, err := jwtPkg.ParseToken(tokenString)
+		claims, err := authenticateToken(tokenString)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "無效的 Token"})
-			c.Abort()
-			return
-		}
-
-		var blacklisted models.JwtBlacklist
-		result := database.DB.Where("token = ?", tokenString).Limit(1).Find(&blacklisted)
-
-		if result.RowsAffected > 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "此 Token 已登出，請重新登入"})
 			c.Abort()
 			return
 		}
@@ -54,7 +99,6 @@ func AuthMiddleware(requiredRole string) gin.HandlerFunc {
 
 		c.Set("user_id", claims.UserID)
 		c.Set("role", claims.Role)
-
 		c.Next()
 	}
 }

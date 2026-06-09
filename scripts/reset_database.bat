@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title REGS - Reset Database
 
 echo =========================================
@@ -15,16 +16,22 @@ set /p "confirm=Are you sure you want to continue? (y/n): "
 if /i not "%confirm%"=="y" (
     echo Operation cancelled.
     pause
-    exit /b
+    exit /b 0
 )
+
+cd /d "%~dp0.."
 
 echo.
 echo Stopping database container and removing data volume...
-cd /d "%~dp0..\"
-docker-compose down -v
+docker compose down -v
+if %errorlevel% neq 0 (
+    echo [錯誤] 重設資料庫失敗。
+    pause
+    exit /b 1
+)
 
 echo.
 echo Database has been successfully reset.
-echo You can now restart it using 'docker-compose up -d'.
+echo You can now restart it using: docker compose up -d
 echo.
 pause

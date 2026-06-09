@@ -14,6 +14,7 @@ import (
 	"regs-backend/internal/database"
 	"regs-backend/internal/judge"
 	"regs-backend/internal/models"
+	"regs-backend/internal/problem"
 	"regs-backend/pkg/utils"
 )
 
@@ -124,78 +125,104 @@ func canAccessSubmission(submission models.Submission, currentUID uint, currentR
 }
 
 func processSubmission(operatorID, workspace, problemID string) {
-	var problem models.Problem
-	if err := database.DB.First(&problem, "id = ?", problemID).Error; err != nil {
+	var prob models.Problem
+	if err := database.DB.First(&prob, "id = ?", problemID).Error; err != nil {
 		updateSubmissionStatus(operatorID, "SE")
 		fmt.Printf("[%s] 無法找到題目資料: %v\n", operatorID, err)
 		return
 	}
 
-	absWorkspace, err := filepath.Abs(workspace)
-	if err != nil {
+	problemRootDir := prob.TestcasePath
+	if problemRootDir == "" {
+		problemRootDir = filepath.Join("testdata", problemID)
+	}
+
+	if _, err := os.Stat(filepath.Join(problemRootDir, "CMakeLists.txt")); err != nil {
 		updateSubmissionStatus(operatorID, "SE")
-		fmt.Printf("[%s] 無法取得 workspace 絕對路徑: %v\n", operatorID, err)
-		return
-	}
-	absWorkspace = filepath.ToSlash(absWorkspace)
-
-	updateSubmissionStatus(operatorID, "Compiling")
-
-	problemRoot := problem.TestcasePath
-	if problemRoot == "" {
-		problemRoot = filepath.Join("testdata", problemID)
-	}
-
-	if _, err := os.Stat(filepath.Join(problemRoot, "CMakeLists.txt")); err != nil {
-		updateSubmissionStatus(operatorID, "SE")
-		fmt.Printf("[%s] 題目資料夾缺少 CMakeLists.txt: %s\n", operatorID, filepath.Join(problemRoot, "CMakeLists.txt"))
+		fmt.Printf("[%s] 題目資料夾缺少 CMakeLists.txt: %s\n", operatorID, filepath.Join(problemRootDir, "CMakeLists.txt"))
 		return
 	}
 
-	absProblemRoot, err := filepath.Abs(problemRoot)
-	if err != nil {
-		updateSubmissionStatus(operatorID, "SE")
-		fmt.Printf("[%s] 無法取得題目根目錄絕對路徑: %v\n", operatorID, err)
-		return
+	// 偵測是否有 settings.yaml（有 presets 的新流程 vs 舊流程）
+	settings, settingsErr := problem.LoadSettings(problemRootDir)
+	usePresets := settingsErr == nil && len(settings.Presets) > 0
+
+	if usePresets {
+		// ===== 新流程：由 judge.RunAndJudge 內部逐 preset 處理 configure/build/run =====
+		fmt.Printf("[%s] 使用 settings.yaml 逐 preset 評測流程\n", operatorID)
+		updateSubmissionStatus(operatorID, "Judging")
+
+		result := judge.RunAndJudge(operatorID, workspace, prob)
+
+		updateSubmissionStatus(operatorID, result.Status)
+
+		database.DB.Model(&models.Submission{}).Where("operator_id = ?", operatorID).
+			Updates(map[string]interface{}{
+				"run_time":    int(result.PeakTime * 1000),
+				"run_memory":  result.PeakMemory,
+				"score":       result.EarnedScore,
+				"total_score": result.TotalScore,
+			})
+
+		fmt.Printf("[評測結束] ID: %s | 結果: %s | 得分: %d/%d | 耗時: %.3fms\n",
+			operatorID, result.Status, result.EarnedScore, result.TotalScore, result.PeakTime*1000)
+	} else {
+		// ===== 舊流程：全域 configure → build → ctest =====
+		absWorkspace, err := filepath.Abs(workspace)
+		if err != nil {
+			updateSubmissionStatus(operatorID, "SE")
+			fmt.Printf("[%s] 無法取得 workspace 絕對路徑: %v\n", operatorID, err)
+			return
+		}
+		absWorkspace = filepath.ToSlash(absWorkspace)
+
+		absProblemRoot, err := filepath.Abs(problemRootDir)
+		if err != nil {
+			updateSubmissionStatus(operatorID, "SE")
+			fmt.Printf("[%s] 無法取得題目根目錄絕對路徑: %v\n", operatorID, err)
+			return
+		}
+		absProblemRoot = filepath.ToSlash(absProblemRoot)
+
+		updateSubmissionStatus(operatorID, "Compiling")
+
+		buildDir := filepath.Join(workspace, "build")
+		if err := os.RemoveAll(buildDir); err != nil {
+			updateSubmissionStatus(operatorID, "SE")
+			fmt.Printf("[%s] 無法清理 build 目錄: %v\n", operatorID, err)
+			return
+		}
+
+		configLogPath := filepath.Join(workspace, "configure.log")
+		if err := judge.RunConfigure(absWorkspace, absProblemRoot, configLogPath); err != nil {
+			updateSubmissionStatus(operatorID, "SE")
+			fmt.Printf("[%s] Configure 失敗，請檢查 configure.log. Error: %v\n", operatorID, err)
+			return
+		}
+		mirrorConfigLog(workspace)
+
+		compileLogPath := filepath.Join(workspace, "compile.log")
+		if err := judge.RunBuild(absWorkspace, absProblemRoot, compileLogPath); err != nil {
+			updateSubmissionStatus(operatorID, "CE")
+			fmt.Printf("[%s] 編譯失敗，請檢查 compile.log. Error: %v\n", operatorID, err)
+			return
+		}
+
+		updateSubmissionStatus(operatorID, "Judging")
+
+		result := judge.RunAndJudge(operatorID, workspace, prob)
+
+		updateSubmissionStatus(operatorID, result.Status)
+
+		database.DB.Model(&models.Submission{}).Where("operator_id = ?", operatorID).
+			Updates(map[string]interface{}{
+				"run_time":   int(result.PeakTime * 1000),
+				"run_memory": result.PeakMemory,
+			})
+
+		fmt.Printf("[評測結束] ID: %s | 結果: %s | 耗時: %.3fms | 記憶體: %d KB\n",
+			operatorID, result.Status, result.PeakTime*1000, result.PeakMemory)
 	}
-	absProblemRoot = filepath.ToSlash(absProblemRoot)
-
-	buildDir := filepath.Join(workspace, "build")
-	if err := os.RemoveAll(buildDir); err != nil {
-		updateSubmissionStatus(operatorID, "SE")
-		fmt.Printf("[%s] 無法清理 build 目錄: %v\n", operatorID, err)
-		return
-	}
-
-	configLogPath := filepath.Join(workspace, "configure.log")
-	if err := judge.RunConfigure(absWorkspace, absProblemRoot, configLogPath); err != nil {
-		updateSubmissionStatus(operatorID, "SE")
-		fmt.Printf("[%s] Configure 失敗，請檢查 configure.log. Error: %v\n", operatorID, err)
-		return
-	}
-	mirrorConfigLog(workspace)
-
-	compileLogPath := filepath.Join(workspace, "compile.log")
-	if err := judge.RunBuild(absWorkspace, absProblemRoot, compileLogPath); err != nil {
-		updateSubmissionStatus(operatorID, "CE")
-		fmt.Printf("[%s] 編譯失敗，請檢查 compile.log. Error: %v\n", operatorID, err)
-		return
-	}
-
-	updateSubmissionStatus(operatorID, "Judging")
-
-	result := judge.RunAndJudge(operatorID, workspace, problem)
-
-	updateSubmissionStatus(operatorID, result.Status)
-
-	database.DB.Model(&models.Submission{}).Where("operator_id = ?", operatorID).
-		Updates(map[string]interface{}{
-			"run_time":   int(result.PeakTime * 1000),
-			"run_memory": result.PeakMemory,
-		})
-
-	fmt.Printf("[評測結束] ID: %s | 結果: %s | 耗時: %.3fms | 記憶體: %d KB\n",
-		operatorID, result.Status, result.PeakTime*1000, result.PeakMemory)
 }
 
 func updateSubmissionStatus(operatorID string, status string) {
@@ -384,6 +411,8 @@ func serializeSubmission(submission models.Submission) gin.H {
 		"updated_at":  submission.UpdatedAt,
 		"run_time":    submission.RunTime,
 		"run_memory":  submission.RunMemory,
+		"score":       submission.Score,
+		"total_score": submission.TotalScore,
 		"Problem": gin.H{
 			"id":    submission.Problem.ID,
 			"title": submission.Problem.Title,

@@ -4,22 +4,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"regs-backend/internal/models"
+	"regs-backend/internal/problem"
 	"regs-backend/pkg/utils"
 )
 
-var officialInjectFiles = []string{
-	"entrypoint.cpp",
-	"test.h",
-}
-
-func problemRoot(problem models.Problem) string {
-	if problem.TestcasePath != "" {
-		return problem.TestcasePath
+func problemRoot(prob models.Problem) string {
+	if prob.TestcasePath != "" {
+		return prob.TestcasePath
 	}
-	return filepath.Join("testdata", problem.ID)
+	return filepath.Join("testdata", prob.ID)
 }
 
 func hasCMakeLists(workspace string) bool {
@@ -27,26 +22,49 @@ func hasCMakeLists(workspace string) bool {
 	return err == nil
 }
 
-func ensureCMakeProject(workspace string, problem models.Problem) error {
+func ensureCMakeProject(workspace string, prob models.Problem) error {
 	if hasCMakeLists(workspace) {
 		return nil
 	}
 
-	root := problemRoot(problem)
-	candidates := []string{
-		filepath.Join(root, "template", "CMakeLists.txt"),
-		filepath.Join(root, "solution", "CMakeLists.txt"),
-		filepath.Join(root, "CMakeLists.txt"),
+	root := problemRoot(prob)
+
+	// 嘗試從 settings.yaml 的 public 欄位找 CMakeLists.txt
+	settings, err := problem.LoadSettings(root)
+	if err == nil && len(settings.Public) > 0 {
+		for _, p := range settings.Public {
+			if p.Target == "CMakeLists.txt" {
+				srcPath := p.Source
+				if !filepath.IsAbs(srcPath) {
+					srcPath = filepath.Join(root, srcPath)
+				}
+				if _, err := os.Stat(srcPath); err == nil {
+					if err := utils.CopyFile(srcPath, filepath.Join(workspace, "CMakeLists.txt")); err != nil {
+						return err
+					}
+					break
+				}
+			}
+		}
 	}
 
-	for _, src := range candidates {
-		if _, err := os.Stat(src); err != nil {
-			continue
+	// 若 settings.yaml 沒提供，fallback 到舊邏輯
+	if !hasCMakeLists(workspace) {
+		candidates := []string{
+			filepath.Join(root, "template", "CMakeLists.txt"),
+			filepath.Join(root, "solution", "CMakeLists.txt"),
+			filepath.Join(root, "CMakeLists.txt"),
 		}
-		if err := utils.CopyFile(src, filepath.Join(workspace, "CMakeLists.txt")); err != nil {
-			return err
+
+		for _, src := range candidates {
+			if _, err := os.Stat(src); err != nil {
+				continue
+			}
+			if err := utils.CopyFile(src, filepath.Join(workspace, "CMakeLists.txt")); err != nil {
+				return err
+			}
+			break
 		}
-		break
 	}
 
 	if !hasCMakeLists(workspace) {
@@ -65,8 +83,22 @@ func ensureCMakeProject(workspace string, problem models.Problem) error {
 	return nil
 }
 
-func injectOfficialProblemFiles(workspace string, problem models.Problem) error {
-	root := problemRoot(problem)
+// injectOfficialProblemFiles 使用 settings.yaml 的 replace 規則已移至 judge 模組中逐 preset 處理。
+// 此函式保留為向後相容（用於沒有 settings.yaml 的題目）。
+func injectOfficialProblemFiles(workspace string, prob models.Problem) error {
+	root := problemRoot(prob)
+
+	// 若存在 settings.yaml，注入在 judge 流程中逐 preset 處理，此處不需要做
+	if _, err := problem.LoadSettings(root); err == nil {
+		fmt.Printf("[injectOfficialProblemFiles] 偵測到 settings.yaml，跳過全域注入（將由 judge 逐 preset 處理）\n")
+		return nil
+	}
+
+	// Fallback: 沒有 settings.yaml 的舊邏輯
+	officialInjectFiles := []string{
+		"entrypoint.cpp",
+		"test.h",
+	}
 
 	for _, fileName := range officialInjectFiles {
 		officialPath := filepath.Join(root, "solution", fileName)
@@ -99,7 +131,7 @@ func removeFilesByName(workspace, fileName string) error {
 		if d.IsDir() {
 			return nil
 		}
-		if strings.EqualFold(d.Name(), fileName) {
+		if d.Name() == fileName {
 			return os.Remove(path)
 		}
 		return nil

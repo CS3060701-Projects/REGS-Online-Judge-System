@@ -33,6 +33,8 @@ erDiagram
         string status
         int run_time
         bigint run_memory
+        int score
+        int total_score
         timestamp created_at
         timestamp updated_at
     }

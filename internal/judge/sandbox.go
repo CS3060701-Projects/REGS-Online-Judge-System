@@ -69,6 +69,15 @@ func RunAndJudgeWithSettings(operatorID string, workspace string, prob models.Pr
 	}
 	defer logFile.Close()
 
+	statusPriority := map[string]int{
+		"AC":  0,
+		"WA":  1,
+		"TLE": 2,
+		"RE":  3,
+		"CE":  4,
+		"SE":  5,
+	}
+
 	for i, preset := range settings.Presets {
 		fmt.Printf("[%s] === Preset %d (score=%d) ===\n", operatorID, i+1, preset.Score)
 		logFile.WriteString(fmt.Sprintf("\n=== Preset %d (score=%d) ===\n", i+1, preset.Score))
@@ -84,19 +93,19 @@ func RunAndJudgeWithSettings(operatorID string, workspace string, prob models.Pr
 			maxTime = result.PeakTime
 		}
 
-		// 更新整體狀態：如果有任一 preset 不是 AC，整體狀態為非 AC
-		if result.Status != "AC" && overallStatus == "AC" {
-			overallStatus = "WA" // 預設改為 WA，若有更嚴重的狀態再覆蓋
+		// 根據嚴重程度更新整體狀態
+		if statusPriority[result.Status] > statusPriority[overallStatus] {
+			overallStatus = result.Status
 		}
 
 		fmt.Printf("[%s] Preset %d 結果: %s (得分: %d/%d)\n", operatorID, i+1, result.Status, result.Earned, result.Score)
 	}
 
-	// 如果全部 AC，整體就是 AC；如果部分通過，用 Partial AC 或 WA 表示
+	// 如果全部 AC，整體就是 AC；如果部分通過但沒有更嚴重的錯誤，標記為 WA
 	if earnedScore == totalScore {
 		overallStatus = "AC"
-	} else if earnedScore > 0 {
-		overallStatus = "WA" // 部分通過也標記 WA
+	} else if earnedScore > 0 && overallStatus == "AC" {
+		overallStatus = "WA" 
 	}
 
 	fmt.Printf("[%s] 評測完成: 狀態=%s, 得分=%d/%d\n", operatorID, overallStatus, earnedScore, totalScore)
@@ -210,7 +219,7 @@ func runSinglePreset(operatorID string, workspace string, absProblemRoot string,
 		fmt.Printf("[%s][preset %d] Replace: %s -> %s\n", operatorID, index, r.Source, r.Target)
 	}
 
-	// 4. Configure
+	// 4. Configure & Build
 	absPresetDir, err := filepath.Abs(presetDir)
 	if err != nil {
 		result.Status = "SE"
@@ -219,17 +228,8 @@ func runSinglePreset(operatorID string, workspace string, absProblemRoot string,
 	absPresetDir = filepath.ToSlash(absPresetDir)
 	absProblemRootSlash := filepath.ToSlash(absProblemRoot)
 
-	configLogPath := filepath.Join(presetDir, "configure.log")
-	if err := RunConfigure(absPresetDir, absProblemRootSlash, configLogPath); err != nil {
-		fmt.Printf("[%s][preset %d] Configure 失敗: %v\n", operatorID, index, err)
-		logFile.WriteString(fmt.Sprintf("Preset %d: Configure FAILED\n", index+1))
-		result.Status = "SE"
-		return result
-	}
-
-	// 5. Build
 	compileLogPath := filepath.Join(presetDir, "compile.log")
-	if err := RunBuild(absPresetDir, absProblemRootSlash, compileLogPath); err != nil {
+	if err := RunCompile(absPresetDir, absProblemRootSlash, compileLogPath); err != nil {
 		fmt.Printf("[%s][preset %d] 編譯失敗: %v\n", operatorID, index, err)
 		logFile.WriteString(fmt.Sprintf("Preset %d: Compile FAILED\n", index+1))
 		result.Status = "CE"
@@ -273,6 +273,7 @@ func runSinglePreset(operatorID string, workspace string, absProblemRoot string,
 		"--test-dir", "build",
 		"--output-on-failure",
 		"-V",
+		"--timeout", fmt.Sprintf("%v", float64(timeoutMs)/1000.0),
 	)
 
 	var stdoutBuf bytes.Buffer
@@ -295,9 +296,8 @@ func runSinglePreset(operatorID string, workspace string, absProblemRoot string,
 
 	// 8. 檢查 Runtime Error
 	if runErr != nil {
-		if strings.Contains(outputStr, "Timeout") ||
-			strings.Contains(outputStr, "TIMEOUT") ||
-			strings.Contains(outputStr, "Test timeout") {
+		// ctest 在 timeout 時通常會印出 "***Timeout"
+		if strings.Contains(outputStr, "***Timeout") {
 			result.Status = "TLE"
 			return result
 		}
@@ -306,6 +306,17 @@ func runSinglePreset(operatorID string, workspace string, absProblemRoot string,
 			result.Status = "RE"
 			return result
 		}
+
+		// Fallback for TLE if we didn't catch it as RE and it mentions timeout (excluding the startup log)
+		lowerOutput := strings.ToLower(outputStr)
+		if strings.Count(lowerOutput, "timeout") > 1 || (strings.Contains(lowerOutput, "timeout") && !strings.Contains(lowerOutput, "test timeout computed to be")) {
+			result.Status = "TLE"
+			return result
+		}
+		
+		// 若無法明確辨識，先視為 RE
+		result.Status = "RE"
+		return result
 	}
 
 	// 9. 比對輸出與 expected
@@ -689,37 +700,21 @@ func cmakeConfigureArgs(problemRoot string) []string {
 	return args
 }
 
-func RunConfigure(absWorkspace, absProblemRoot string, configLogPath string) error {
-	configLog, err := os.Create(configLogPath)
-	if err != nil {
-		return err
-	}
-	defer configLog.Close()
-
-	problemRoot := filepath.Clean(filepath.FromSlash(absProblemRoot))
-	args := append([]string{
-		"run", "--rm",
-		"--network", BuildNetwork,
-		"-v", absWorkspace + ":/upload",
-		"-v", absProblemRoot + ":/problem",
-		"-v", absWorkspace + ":/app",
-		"-w", "/app",
-		models.JUDGER_IMAGE,
-		"cmake",
-	}, cmakeConfigureArgs(problemRoot)...)
-
-	cmdConfig := exec.Command("docker", args...)
-	cmdConfig.Stdout = configLog
-	cmdConfig.Stderr = configLog
-	return cmdConfig.Run()
-}
-
-func RunBuild(absWorkspace, absProblemRoot string, compileLogPath string) error {
+func RunCompile(absWorkspace, absProblemRoot string, compileLogPath string) error {
 	compileLog, err := os.Create(compileLogPath)
 	if err != nil {
 		return err
 	}
 	defer compileLog.Close()
+
+	problemRoot := filepath.Clean(filepath.FromSlash(absProblemRoot))
+	
+	// Construct cmake configure command as a string
+	configArgs := cmakeConfigureArgs(problemRoot)
+	configCmdStr := "cmake " + strings.Join(configArgs, " ")
+	
+	// Construct the combined shell command
+	combinedCmd := fmt.Sprintf("%s && cmake --build build --verbose", configCmdStr)
 
 	cmdBuild := exec.Command("docker", "run", "--rm",
 		"--network", BuildNetwork,
@@ -728,9 +723,7 @@ func RunBuild(absWorkspace, absProblemRoot string, compileLogPath string) error 
 		"-v", absWorkspace+":/app",
 		"-w", "/app",
 		models.JUDGER_IMAGE,
-		"cmake",
-		"--build", "build",
-		"--verbose",
+		"sh", "-c", combinedCmd,
 	)
 
 	cmdBuild.Stdout = compileLog

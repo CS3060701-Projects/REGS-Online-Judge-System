@@ -6,6 +6,7 @@ tmp/
 go-build/
 
 storage/
+scripts/
 
 private.pem
 

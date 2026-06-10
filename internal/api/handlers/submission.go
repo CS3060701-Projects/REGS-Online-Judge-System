@@ -266,69 +266,7 @@ func GetSubmissionStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, serializeSubmission(submission))
 }
 
-// GetSubmissionLog godoc
-// @Summary Get submission log file
-// @Description Downloads a specific log file (configure, compile, or output) for a submission.
-// @Tags Submissions
-// @Produce  plain
-// @Security Bearer
-// @Param   operatorId path string true "Operator ID of the submission"
-// @Param   type path string true "Log type" Enums(configure, compile, output)
-// @Success 200 {file} file "Log file content"
-// @Failure 400 {object} object{error=string} "無效的日誌類型"
-// @Failure 404 {object} object{error=string} "找不到指定的日誌檔案"
-// @Router /submissions/{operatorId}/logs/{type} [get]
-func GetSubmissionLog(c *gin.Context) {
-	operatorID := c.Param("operatorId")
-	logType := c.Param("type")
-	val, _ := c.Get("user_id")
-	currentRole, _ := c.Get("role")
-	currentUID, ok := val.(uint)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授權的操作"})
-		return
-	}
 
-	var submission models.Submission
-	if err := database.DB.Where("operator_id = ?", operatorID).First(&submission).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "找不到該筆評測紀錄"})
-		return
-	}
-
-	role, _ := currentRole.(string)
-	if !canAccessSubmission(submission, currentUID, role) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "你沒有權限查看此日誌"})
-		return
-	}
-
-	var fileName string
-	switch logType {
-	case "configure":
-		fileName = "configure.log"
-	case "config":
-		fileName = "config.log"
-	case "compile":
-		fileName = "compile.log"
-	case "output":
-		fileName = "output.log"
-	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "無效的日誌類型"})
-		return
-	}
-
-	logPath := filepath.Join("storage", "workspaces", operatorID, fileName)
-	if _, err := os.Stat(logPath); os.IsNotExist(err) {
-		if logType == "config" {
-			logPath = filepath.Join("storage", "workspaces", operatorID, "configure.log")
-		}
-		if _, err := os.Stat(logPath); os.IsNotExist(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "找不到指定的日誌檔案"})
-			return
-		}
-	}
-
-	c.File(logPath)
-}
 
 func getSubmissionsByUserID(userID string) ([]models.Submission, error) {
 	var submissions []models.Submission
@@ -461,56 +399,4 @@ func GetSubmissionSource(c *gin.Context) {
 	c.FileAttachment(filePath, downloadName)
 }
 
-// RerunSubmission godoc
-// @Summary Re-run a submission job
-// @Description Re-queues an existing submission for judging in the background.
-// @Tags Submissions
-// @Produce  json
-// @Security Bearer
-// @Param   operatorId path string true "Operator ID of the submission"
-// @Success 200 {object} object{message=string, operatorId=string, status=string}
-// @Failure 403 {object} object{error=string} "權限不足"
-// @Failure 404 {object} object{error=string} "找不到提交紀錄"
-// @Router /submissions/{operatorId}/rerun [post]
-func RerunSubmission(c *gin.Context) {
-	operatorID := c.Param("operatorId")
-	val, _ := c.Get("user_id")
-	currentRole, _ := c.Get("role")
-	currentUID, ok := val.(uint)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授權的操作"})
-		return
-	}
 
-	var submission models.Submission
-	if err := database.DB.Where("operator_id = ?", operatorID).First(&submission).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "找不到提交紀錄"})
-		return
-	}
-
-	role, _ := currentRole.(string)
-	if !canAccessSubmission(submission, currentUID, role) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "你沒有權限重新執行此評測"})
-		return
-	}
-
-	workspace := filepath.Join("storage", "workspaces", operatorID)
-	if _, err := os.Stat(workspace); os.IsNotExist(err) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "找不到評測工作目錄，無法重新執行"})
-		return
-	}
-
-	updateSubmissionStatus(operatorID, "Pending")
-
-	JobQueue <- JudgeJob{
-		OperatorID: operatorID,
-		Workspace:  workspace,
-		ProblemID:  submission.ProblemID,
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":    "已重新排入評測佇列",
-		"operatorId": operatorID,
-		"status":     "Pending",
-	})
-}

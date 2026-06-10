@@ -314,45 +314,7 @@ paths:
               schema:
                 type: string
                 format: binary
-  /submissions/{operatorId}/logs/{type}:
-    get:
-      tags: [Submissions]
-      summary: 查詢分階段日誌
-      description: type 可為 config、configure、compile、output
-      security: [{BearerAuth: []}]
-      parameters:
-        - name: operatorId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: type
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [config, configure, compile, output]
-      responses:
-        '200':
-          description: 日誌檔案內容
-          content:
-            text/plain:
-              schema:
-                type: string
-  /submissions/{operatorId}/rerun:
-    post:
-      tags: [Submissions]
-      summary: 重新執行評測任務
-      security: [{BearerAuth: []}]
-      parameters:
-        - name: operatorId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: 已重新排入佇列
+
   /stats/problems/{problem_id}:
     get:
       tags: [Statistics]

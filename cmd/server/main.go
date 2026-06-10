@@ -71,7 +71,6 @@ func main() {
 		public := api.Group("/")
 		public.Use(middleware.OptionalAuthMiddleware())
 		{
-			public.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 			public.POST("/users/register", handlers.Register)
 			public.POST("/users/login", handlers.Login)
 			public.GET("/problems", handlers.GetProblems)
@@ -89,8 +88,6 @@ func main() {
 			auth.GET("/submissions", handlers.GetSubmissions)
 			auth.GET("/submissions/:operatorId", handlers.GetSubmissionStatus)
 			auth.GET("/submissions/:operatorId/source", handlers.GetSubmissionSource)
-			auth.GET("/submissions/:operatorId/logs/:type", handlers.GetSubmissionLog)
-			auth.POST("/submissions/:operatorId/rerun", handlers.RerunSubmission)
 			auth.GET("/users/me", handlers.GetMe)
 
 			admin := auth.Group("/")

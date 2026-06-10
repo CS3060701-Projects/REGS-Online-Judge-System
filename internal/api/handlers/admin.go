@@ -98,6 +98,16 @@ func CreateProblem(c *gin.Context) {
 	timeLimit := 1000
 	memoryLimit := 256
 	if settingsRoot := findSettingsYAML(testcasePath); settingsRoot != "" {
+		// Flatten directory if settings.yaml is in a subdirectory
+		if filepath.Clean(settingsRoot) != filepath.Clean(testcasePath) {
+			tmpPath := testcasePath + "_tmp"
+			if err := os.Rename(settingsRoot, tmpPath); err == nil {
+				os.RemoveAll(testcasePath)
+				os.Rename(tmpPath, testcasePath)
+				settingsRoot = testcasePath
+			}
+		}
+
 		if settings, err := problemPkg.LoadSettings(settingsRoot); err == nil {
 			if settings.Limits.TotalTime > 0 {
 				timeLimit = settings.Limits.TotalTime

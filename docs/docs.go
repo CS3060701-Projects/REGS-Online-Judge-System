@@ -9,15 +9,7 @@ const docTemplate = `{
     "info": {
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
-        "termsOfService": "http://swagger.io/terms/",
-        "contact": {
-            "name": "API Support",
-            "url": "https://github.com/your-repo"
-        },
-        "license": {
-            "name": "MIT",
-            "url": "https://opensource.org/licenses/MIT"
-        },
+        "contact": {},
         "version": "{{.Version}}"
     },
     "host": "{{.Host}}",
@@ -92,9 +84,9 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "(Admin only) Creates a new problem. If a problem with the same ID exists and was soft-deleted, it will be restored and updated. If it exists and is active, it will return a conflict error.",
+                "description": "(Admin only) Creates or restores a problem and uploads its test data in a single request using multipart/form-data.\ntime_limit and memory_limit are read automatically from settings.yaml inside the zip (limits.totalTime / limits.memory).",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -102,16 +94,40 @@ const docTemplate = `{
                 "tags": [
                     "Admin"
                 ],
-                "summary": "Create or update a problem",
+                "summary": "Create or update a problem (with test data)",
                 "parameters": [
                     {
-                        "description": "Problem data",
-                        "name": "problem",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.Problem"
-                        }
+                        "type": "string",
+                        "description": "Problem ID",
+                        "name": "id",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Problem title",
+                        "name": "title",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Problem description (Markdown)",
+                        "name": "description",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Whether the problem is publicly visible (default true)",
+                        "name": "is_visible",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "Test cases as a .zip file (must contain settings.yaml)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -124,6 +140,28 @@ const docTemplate = `{
                                     "$ref": "#/definitions/models.Problem"
                                 },
                                 "message": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
                                     "type": "string"
                                 }
                             }
@@ -220,43 +258,6 @@ const docTemplate = `{
                         "description": "Problem ID",
                         "name": "id",
                         "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {}
-            }
-        },
-        "/problems/{id}/testdata": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "(Admin only) Uploads a .zip file containing test data (e.g., *.in, *.out files). This will replace any existing test data for the problem.",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin"
-                ],
-                "summary": "Upload test data for a problem",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Problem ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "file",
-                        "description": "Test cases as a .zip file",
-                        "name": "file",
-                        "in": "formData",
                         "required": true
                     }
                 ],
@@ -496,74 +497,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "找不到該筆評測紀錄",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/submissions/{operatorId}/logs/{type}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "Downloads a specific log file (configure, compile, or output) for a submission.",
-                "produces": [
-                    "text/plain"
-                ],
-                "tags": [
-                    "Submissions"
-                ],
-                "summary": "Get submission log file",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Operator ID of the submission",
-                        "name": "operatorId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "enum": [
-                            "configure",
-                            "compile",
-                            "output"
-                        ],
-                        "type": "string",
-                        "description": "Log type",
-                        "name": "type",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Log file content",
-                        "schema": {
-                            "type": "file"
-                        }
-                    },
-                    "400": {
-                        "description": "無效的日誌類型",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "找不到指定的日誌檔案",
                         "schema": {
                             "type": "object",
                             "properties": {
@@ -1015,9 +948,17 @@ const docTemplate = `{
                 "run_time": {
                     "type": "integer"
                 },
+                "score": {
+                    "description": "實際得分",
+                    "type": "integer"
+                },
                 "status": {
                     "description": "Pending, AC, WA, CE, SE, RE, TLE",
                     "type": "string"
+                },
+                "total_score": {
+                    "description": "該題滿分",
+                    "type": "integer"
                 },
                 "updatedAt": {
                     "type": "string"
@@ -1055,8 +996,7 @@ const docTemplate = `{
         "Bearer": {
             "type": "apiKey",
             "name": "Authorization",
-            "in": "header",
-            "description": "請在此欄位輸入 'Bearer ' 字串，並在其後加上您的 JWT Token。"
+            "in": "header"
         }
     }
 }`

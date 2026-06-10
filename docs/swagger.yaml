@@ -71,9 +71,15 @@ definitions:
         type: integer
       run_time:
         type: integer
+      score:
+        description: 實際得分
+        type: integer
       status:
         description: Pending, AC, WA, CE, SE, RE, TLE
         type: string
+      total_score:
+        description: 該題滿分
+        type: integer
       updatedAt:
         type: string
       user:
@@ -96,14 +102,8 @@ definitions:
     type: object
 host: localhost:8081
 info:
-  contact:
-    name: API Support
-    url: https://github.com/your-repo
+  contact: {}
   description: This is the API server for the REGS Online Judge system.
-  license:
-    name: MIT
-    url: https://opensource.org/licenses/MIT
-  termsOfService: http://swagger.io/terms/
   title: REGS Online Judge API
   version: "1.0"
 paths:
@@ -151,17 +151,34 @@ paths:
       - Problems
     put:
       consumes:
-      - application/json
-      description: (Admin only) Creates a new problem. If a problem with the same
-        ID exists and was soft-deleted, it will be restored and updated. If it exists
-        and is active, it will return a conflict error.
+      - multipart/form-data
+      description: |-
+        (Admin only) Creates or restores a problem and uploads its test data in a single request using multipart/form-data.
+        time_limit and memory_limit are read automatically from settings.yaml inside the zip (limits.totalTime / limits.memory).
       parameters:
-      - description: Problem data
-        in: body
-        name: problem
+      - description: Problem ID
+        in: formData
+        name: id
         required: true
-        schema:
-          $ref: '#/definitions/models.Problem'
+        type: string
+      - description: Problem title
+        in: formData
+        name: title
+        required: true
+        type: string
+      - description: Problem description (Markdown)
+        in: formData
+        name: description
+        type: string
+      - description: Whether the problem is publicly visible (default true)
+        in: formData
+        name: is_visible
+        type: boolean
+      - description: Test cases as a .zip file (must contain settings.yaml)
+        in: formData
+        name: file
+        required: true
+        type: file
       produces:
       - application/json
       responses:
@@ -174,9 +191,23 @@ paths:
               message:
                 type: string
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
       security:
-      - ApiKeyAuth: []
-      summary: Create or update a problem
+      - Bearer: []
+      summary: Create or update a problem (with test data)
       tags:
       - Admin
   /problems/{id}:
@@ -191,7 +222,7 @@ paths:
         type: string
       responses: {}
       security:
-      - ApiKeyAuth: []
+      - Bearer: []
       summary: Delete a problem
       tags:
       - Admin
@@ -237,33 +268,8 @@ paths:
       - application/zip
       responses: {}
       security:
-      - ApiKeyAuth: []
+      - Bearer: []
       summary: Download problem test cases
-      tags:
-      - Admin
-  /problems/{id}/testdata:
-    post:
-      consumes:
-      - multipart/form-data
-      description: (Admin only) Uploads a .zip file containing test data (e.g., *.in,
-        *.out files). This will replace any existing test data for the problem.
-      parameters:
-      - description: Problem ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Test cases as a .zip file
-        in: formData
-        name: file
-        required: true
-        type: file
-      produces:
-      - application/json
-      responses: {}
-      security:
-      - ApiKeyAuth: []
-      summary: Upload test data for a problem
       tags:
       - Admin
   /stats/problems/{problem_id}:
@@ -334,7 +340,7 @@ paths:
                 type: string
             type: object
       security:
-      - ApiKeyAuth: []
+      - Bearer: []
       summary: Get personal submission history
       tags:
       - Submissions
@@ -382,7 +388,7 @@ paths:
                 type: string
             type: object
       security:
-      - ApiKeyAuth: []
+      - Bearer: []
       summary: Submit code for judging
       tags:
       - Submissions
@@ -421,53 +427,8 @@ paths:
                 type: string
             type: object
       security:
-      - ApiKeyAuth: []
+      - Bearer: []
       summary: Get submission status
-      tags:
-      - Submissions
-  /submissions/{operatorId}/logs/{type}:
-    get:
-      description: Downloads a specific log file (configure, compile, or output) for
-        a submission.
-      parameters:
-      - description: Operator ID of the submission
-        in: path
-        name: operatorId
-        required: true
-        type: string
-      - description: Log type
-        enum:
-        - configure
-        - compile
-        - output
-        in: path
-        name: type
-        required: true
-        type: string
-      produces:
-      - text/plain
-      responses:
-        "200":
-          description: Log file content
-          schema:
-            type: file
-        "400":
-          description: 無效的日誌類型
-          schema:
-            properties:
-              error:
-                type: string
-            type: object
-        "404":
-          description: 找不到指定的日誌檔案
-          schema:
-            properties:
-              error:
-                type: string
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Get submission log file
       tags:
       - Submissions
   /submissions/{operatorId}/source:
@@ -488,7 +449,7 @@ paths:
           schema:
             type: file
       security:
-      - ApiKeyAuth: []
+      - Bearer: []
       summary: Download submission source code
       tags:
       - Submissions
@@ -596,7 +557,7 @@ paths:
                 type: string
             type: object
       security:
-      - ApiKeyAuth: []
+      - Bearer: []
       summary: Log out the current user
       tags:
       - Users
@@ -626,7 +587,7 @@ paths:
                 type: string
             type: object
       security:
-      - ApiKeyAuth: []
+      - Bearer: []
       summary: Get current user's profile
       tags:
       - Users
@@ -682,7 +643,7 @@ paths:
       tags:
       - Users
 securityDefinitions:
-  ApiKeyAuth:
+  Bearer:
     in: header
     name: Authorization
     type: apiKey

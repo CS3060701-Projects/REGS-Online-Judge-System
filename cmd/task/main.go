@@ -2,6 +2,11 @@ package main
 
 import (
 	"bufio"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"os/exec"
@@ -37,7 +42,7 @@ func printUsage() {
 	fmt.Println("REGS Task Runner (Cross-Platform)")
 	fmt.Println("Usage: go run cmd/task/main.go <command>")
 	fmt.Println("\nCommands:")
-	fmt.Println("  server       - Ensure Docker is running, build, and start the server")
+	fmt.Println("  server       - Ensure Docker, build judger image, generate keys, build and start server")
 	fmt.Println("  reset-db     - Reset the database (DELETES ALL DATA)")
 	fmt.Println("  seed-admin   - Create the default admin user")
 }
@@ -55,6 +60,47 @@ func ensureDocker() {
 	time.Sleep(4 * time.Second)
 }
 
+func ensureJudgerImage() {
+	fmt.Println("[INFO] 檢查 Docker 映像檔 (regs-judger)...")
+	cmd := exec.Command("docker", "image", "inspect", "regs-judger")
+	if err := cmd.Run(); err != nil {
+		fmt.Println("[INFO] 映像檔不存在，準備開始建置 (這可能需要幾分鐘)...")
+		buildCmd := exec.Command("docker", "build", "-t", "regs-judger", "-f", "dockerfile", ".")
+		buildCmd.Stdout = os.Stdout
+		buildCmd.Stderr = os.Stderr
+		if err := buildCmd.Run(); err != nil {
+			fmt.Println("[ERROR] 建置 regs-judger 失敗。")
+			os.Exit(1)
+		}
+		fmt.Println("[INFO] regs-judger 建置完成。")
+	} else {
+		fmt.Println("[INFO] 映像檔 (regs-judger) 已存在。")
+	}
+}
+
+func ensureKeys() {
+	if _, err := os.Stat("private.pem"); os.IsNotExist(err) {
+		fmt.Println("[INFO] 未找到 private.pem，正在產生新的 ECDSA P-256 金鑰對...")
+		privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			fmt.Printf("[ERROR] 無法產生金鑰: %v\n", err)
+			os.Exit(1)
+		}
+
+		x509Encoded, _ := x509.MarshalPKCS8PrivateKey(privateKey)
+		pemEncoded := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: x509Encoded})
+		os.WriteFile("private.pem", pemEncoded, 0600)
+
+		x509EncodedPub, _ := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+		pemEncodedPub := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: x509EncodedPub})
+		os.WriteFile("public.pem", pemEncodedPub, 0644)
+		
+		fmt.Println("[INFO] 金鑰產生完成。")
+	} else {
+		fmt.Println("[INFO] JWT 金鑰已存在。")
+	}
+}
+
 func runServer() {
 	fmt.Println("=========================================")
 	fmt.Println("        REGS 評測系統 - 伺服器啟動")
@@ -62,8 +108,10 @@ func runServer() {
 	fmt.Println()
 
 	ensureDocker()
+	ensureJudgerImage()
+	ensureKeys()
 
-	fmt.Println("\n[提示] Docker 容器已在運行中。")
+	fmt.Println("\n[提示] 依賴環境皆已就緒。")
 	fmt.Println("\n[2/3] 正在編譯最新程式碼...")
 
 	binaryName := "server"

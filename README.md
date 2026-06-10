@@ -47,21 +47,41 @@ docker compose up -d
 docker build -t regs-judger -f dockerfile .
 ```
 
-3. **建立管理員帳號**
+3. 確認 `private.pem` / `public.pem` 存在（或使用 openssl 重新生成）
+```bash
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out private.pem
+openssl pkey -in private.pem -pubout -out public.pem
+```
+
+4. **建立管理員帳號**
 
 ```bat
 scripts\register_admin.bat
 ```
 
-4. **啟動後端伺服器**
+5. **啟動後端伺服器**
 
-```bash
-go run ./cmd/server
-```
+直接執行 `server.bat`。
 
-或直接執行 `server.bat`。
+## 提交評測流程
 
-5. **訪問服務**
+1. 使用者以 JWT 登入後，POST `/api/submissions` 上傳 `.zip` 與 `problem_id`
+2. 伺服器解壓縮、檢查 `CMakeLists.txt`、替換官方 `entrypoint.cpp`
+3. 立即回傳 `operatorId`，背景 Worker 透過 Semaphore 控制併發
+4. 以 GET `/api/submissions/{operatorId}` 輪詢狀態
+5. 以 GET `/api/submissions/{operatorId}/logs/{type}` 查詢日誌（`configure` / `compile` / `output`）
+6. 可 POST `/api/submissions/{operatorId}/rerun` 重新執行評測
+
+## 題目管理（Admin）
+
+1. PUT `/api/problems` 建立或更新題目
+2. POST `/api/problems/{id}/testdata` 上傳測資 `.zip`
+3. GET `/api/problems/{id}/testcases` 下載測資
+4. DELETE `/api/problems/{id}` 刪除題目
+
+題目測資預設放在 `testdata/{problem_id}/`，需包含根目錄 `CMakeLists.txt` 與 `solution/`、`spec/` 等結構。
+
+5. **API文件**
 
 - API：`http://localhost:8081`
 - OpenAPI 3.0：`http://localhost:8081/openapi.yaml`
@@ -132,7 +152,3 @@ regs-backend/
 - `scripts/reset_database.bat`：**(危險操作)** 重設資料庫
 
 ---
-
-## 授權
-
-本專案為 NTUST CS3060701 課程期末專案，請遵守學術誠信規範。

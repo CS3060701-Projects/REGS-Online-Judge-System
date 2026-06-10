@@ -1,5 +1,7 @@
 *.exe
 
+testdata/
+
 tmp/
 go-build/
 

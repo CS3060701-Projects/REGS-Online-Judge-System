@@ -147,6 +147,7 @@ regs-backend/
 ├── pkg/                # 公共套件（jwt、utils）
 ├── storage/            # 提交與工作目錄（執行期生成）
 ├── testdata/           # 題目測資
+├── scripts/            # 獨立自動化測試與驗證腳本
 ├── docker-compose.yml
 ├── dockerfile
 └── go.mod

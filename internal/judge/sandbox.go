@@ -219,7 +219,7 @@ func runSinglePreset(operatorID string, workspace string, absProblemRoot string,
 		fmt.Printf("[%s][preset %d] Replace: %s -> %s\n", operatorID, index, r.Source, r.Target)
 	}
 
-	// 4. Configure
+	// 4. Configure & Build
 	absPresetDir, err := filepath.Abs(presetDir)
 	if err != nil {
 		result.Status = "SE"
@@ -228,17 +228,8 @@ func runSinglePreset(operatorID string, workspace string, absProblemRoot string,
 	absPresetDir = filepath.ToSlash(absPresetDir)
 	absProblemRootSlash := filepath.ToSlash(absProblemRoot)
 
-	configLogPath := filepath.Join(presetDir, "configure.log")
-	if err := RunConfigure(absPresetDir, absProblemRootSlash, configLogPath); err != nil {
-		fmt.Printf("[%s][preset %d] Configure 失敗: %v\n", operatorID, index, err)
-		logFile.WriteString(fmt.Sprintf("Preset %d: Configure FAILED\n", index+1))
-		result.Status = "SE"
-		return result
-	}
-
-	// 5. Build
 	compileLogPath := filepath.Join(presetDir, "compile.log")
-	if err := RunBuild(absPresetDir, absProblemRootSlash, compileLogPath); err != nil {
+	if err := RunCompile(absPresetDir, absProblemRootSlash, compileLogPath); err != nil {
 		fmt.Printf("[%s][preset %d] 編譯失敗: %v\n", operatorID, index, err)
 		logFile.WriteString(fmt.Sprintf("Preset %d: Compile FAILED\n", index+1))
 		result.Status = "CE"
@@ -709,37 +700,21 @@ func cmakeConfigureArgs(problemRoot string) []string {
 	return args
 }
 
-func RunConfigure(absWorkspace, absProblemRoot string, configLogPath string) error {
-	configLog, err := os.Create(configLogPath)
-	if err != nil {
-		return err
-	}
-	defer configLog.Close()
-
-	problemRoot := filepath.Clean(filepath.FromSlash(absProblemRoot))
-	args := append([]string{
-		"run", "--rm",
-		"--network", BuildNetwork,
-		"-v", absWorkspace + ":/upload",
-		"-v", absProblemRoot + ":/problem",
-		"-v", absWorkspace + ":/app",
-		"-w", "/app",
-		models.JUDGER_IMAGE,
-		"cmake",
-	}, cmakeConfigureArgs(problemRoot)...)
-
-	cmdConfig := exec.Command("docker", args...)
-	cmdConfig.Stdout = configLog
-	cmdConfig.Stderr = configLog
-	return cmdConfig.Run()
-}
-
-func RunBuild(absWorkspace, absProblemRoot string, compileLogPath string) error {
+func RunCompile(absWorkspace, absProblemRoot string, compileLogPath string) error {
 	compileLog, err := os.Create(compileLogPath)
 	if err != nil {
 		return err
 	}
 	defer compileLog.Close()
+
+	problemRoot := filepath.Clean(filepath.FromSlash(absProblemRoot))
+	
+	// Construct cmake configure command as a string
+	configArgs := cmakeConfigureArgs(problemRoot)
+	configCmdStr := "cmake " + strings.Join(configArgs, " ")
+	
+	// Construct the combined shell command
+	combinedCmd := fmt.Sprintf("%s && cmake --build build --verbose", configCmdStr)
 
 	cmdBuild := exec.Command("docker", "run", "--rm",
 		"--network", BuildNetwork,
@@ -748,9 +723,7 @@ func RunBuild(absWorkspace, absProblemRoot string, compileLogPath string) error 
 		"-v", absWorkspace+":/app",
 		"-w", "/app",
 		models.JUDGER_IMAGE,
-		"cmake",
-		"--build", "build",
-		"--verbose",
+		"sh", "-c", combinedCmd,
 	)
 
 	cmdBuild.Stdout = compileLog

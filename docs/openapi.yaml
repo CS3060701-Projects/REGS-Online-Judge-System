@@ -65,6 +65,8 @@ components:
       properties:
         operatorId:
           type: string
+        operator_id:
+          type: string
         problem_id:
           type: string
         status:
@@ -74,9 +76,23 @@ components:
           type: integer
         run_memory:
           type: integer
+        score:
+          type: integer
+        total_score:
+          type: integer
         created_at:
           type: string
           format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        Problem:
+          type: object
+          properties:
+            id:
+              type: string
+            title:
+              type: string
 paths:
   /users/register:
     post:

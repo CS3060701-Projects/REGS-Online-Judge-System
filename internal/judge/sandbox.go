@@ -640,13 +640,18 @@ func RunAndJudgeCTest(operatorID string, workspace string, problem models.Proble
 
 func isRuntimeError(output string, err error) bool {
 	lower := strings.ToLower(output)
+	
+	// 根據期末專案規格：Exit Code 非 0 視為 RE
+	// CTest 若捕捉到非零退出，會印出 "Exit code X" 或 "Exception: ..."
 	if strings.Contains(lower, "segmentation fault") ||
 		strings.Contains(lower, "core dumped") ||
 		strings.Contains(lower, "bus error") ||
 		strings.Contains(lower, "access violation") ||
 		strings.Contains(lower, "abort") ||
 		strings.Contains(lower, "sigabrt") ||
-		strings.Contains(lower, "sigsegv") {
+		strings.Contains(lower, "sigsegv") ||
+		strings.Contains(lower, "exception:") ||
+		(strings.Contains(lower, "exit code") && !strings.Contains(lower, "exit code 0")) {
 		return true
 	}
 

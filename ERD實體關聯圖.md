@@ -7,15 +7,15 @@ erDiagram
     User ||--o{ Submission : submits
     Problem ||--o{ Submission : has
     User {
-        uint id PK
-        string username UK
+        uint id 
+        string username 
         string password_hash
         string role
         timestamp created_at
         timestamp updated_at
     }
     Problem {
-        string id PK
+        string id 
         string title
         text description
         int time_limit
@@ -27,9 +27,9 @@ erDiagram
         timestamp deleted_at
     }
     Submission {
-        string operator_id PK
-        uint user_id FK
-        string problem_id FK
+        string operator_id 
+        uint user_id 
+        string problem_id 
         string status
         int run_time
         bigint run_memory
@@ -39,7 +39,7 @@ erDiagram
         timestamp updated_at
     }
     JwtBlacklist {
-        uint id PK
+        uint id 
         text token
         timestamp expires_at
         timestamp created_at

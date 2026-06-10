@@ -47,10 +47,18 @@ func Register(c *gin.Context) {
 		return
 	}
 
+	var totalUsers int64
+	database.DB.Model(&models.User{}).Count(&totalUsers)
+
+	role := "User"
+	if totalUsers == 0 {
+		role = "Admin"
+	}
+
 	newUser := models.User{
 		Username:     req.Username,
 		PasswordHash: string(hashedPassword),
-		Role:         "User",
+		Role:         role,
 	}
 
 	if err := database.DB.Create(&newUser).Error; err != nil {

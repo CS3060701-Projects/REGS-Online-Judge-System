@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="5"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-05-31T16:54:50"
+	>
+	<testcase name="case1" classname="case1" time="0.00378211" status="run">
+		<properties/>
+		<system-out>Valid: 885d486407a90dc379f72a9981fba62dea87a083d0b169c345c20ef137e33d00
+Suite: ID priority comes first
+Has 4 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case2" classname="case2" time="0.00356884" status="run">
+		<properties/>
+		<system-out>Valid: bc220d80f4596b9e94ab13507de5c306f088baf05b9340d8c633d7d7fd3e11bb
+Suite: Type priority orders the middle layer
+Has 5 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case3" classname="case3" time="0.00367708" status="run">
+		<properties/>
+		<system-out>Valid: d5956684846393dcefb01af9135a46e1065e3cc770f1b6610bddd28dd8fe60bc
+Suite: ID priority beats type priority
+Has 3 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case4" classname="case4" time="0.00387519" status="run">
+		<properties/>
+		<system-out>Valid: 936e1dadf18e7f72d4340efa8a8affc4b93ca705336c2afd8bae821267a08f2d
+Suite: Rooms outside all priorities fall back to player count
+Has 5 Checkpoint, PASSED
+</system-out>
+	</testcase>
+	<testcase name="case5" classname="case5" time="0.00384689" status="run">
+		<properties/>
+		<system-out>Valid: 2a101ead67ccb9b5c4bc791415b7cd0c618766c8b0b4a5014c75099c451941df
+Suite: Mixed priorities produce one total order
+Has 8 Checkpoint, PASSED
+</system-out>
+	</testcase>
+</testsuite>

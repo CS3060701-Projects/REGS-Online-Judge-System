@@ -137,6 +137,17 @@ func processSubmission(operatorID, workspace, problemID string) {
 		problemRootDir = filepath.Join("testdata", problemID)
 	}
 
+	// 為了避免多個 Worker 並行評測時，CMake 產生檔案導致的讀寫衝突（Race Condition），
+	// 並且不修改現有題目設計，我們將題目目錄完整複製到當前工作區，確保每個評測任務都有獨立的題目環境。
+	localProblemDir := filepath.Join(workspace, "problem_data")
+	if err := utils.CopyDir(problemRootDir, localProblemDir); err != nil {
+		updateSubmissionStatus(operatorID, "SE")
+		fmt.Printf("[%s] 無法建立題目隔離環境: %v\n", operatorID, err)
+		return
+	}
+	prob.TestcasePath = localProblemDir // 讓後續的 judge.RunAndJudge 使用這個隔離的拷貝
+	problemRootDir = localProblemDir
+
 	if _, err := os.Stat(filepath.Join(problemRootDir, "CMakeLists.txt")); err != nil {
 		updateSubmissionStatus(operatorID, "SE")
 		fmt.Printf("[%s] 題目資料夾缺少 CMakeLists.txt: %s\n", operatorID, filepath.Join(problemRootDir, "CMakeLists.txt"))

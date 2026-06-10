@@ -1,0 +1,74 @@
+title: Voyage Log
+
+limits:
+  totalTime: 1000
+  cpuTime: 1000
+  memory: 524288
+
+presets:
+  - score: 2
+    replace:
+      - { source: "template/entrypoint.cpp", target: "entrypoint.cpp" }
+      - { source: "template/test.h", target: "test.h" }
+      - { source: "online-judge/case1.h", target: "case.h" }
+    expected:
+      type: file-content
+      value: online-judge/case1
+
+  - score: 2
+    replace:
+      - { source: "template/entrypoint.cpp", target: "entrypoint.cpp" }
+      - { source: "template/test.h", target: "test.h" }
+      - { source: "online-judge/case2.h", target: "case.h" }
+    expected:
+      type: file-content
+      value: online-judge/case2
+
+  - score: 4
+    replace:
+      - { source: "template/entrypoint.cpp", target: "entrypoint.cpp" }
+      - { source: "template/test.h", target: "test.h" }
+      - { source: "online-judge/case3.h", target: "case.h" }
+    expected:
+      type: file-content
+      value: online-judge/case3
+
+  - score: 4
+    replace:
+      - { source: "template/entrypoint.cpp", target: "entrypoint.cpp" }
+      - { source: "template/test.h", target: "test.h" }
+      - { source: "online-judge/case4.h", target: "case.h" }
+    expected:
+      type: file-content
+      value: online-judge/case4
+
+  - score: 8
+    replace:
+      - { source: "template/entrypoint.cpp", target: "entrypoint.cpp" }
+      - { source: "template/test.h", target: "test.h" }
+      - { source: "online-judge/case5.h", target: "case.h" }
+    expected:
+      type: file-content
+      value: online-judge/case5
+
+public:
+  # 測試框架與文件
+  - source: "template/entrypoint.cpp"
+    target: "entrypoint.cpp"
+  - source: "template/test.h"
+    target: "test.h"
+  - source: "template/README.pdf"
+    target: "README.pdf"
+  - source: "template/CMakeLists.txt"
+    target: "CMakeLists.txt"
+  # 測資範例
+  - source: "template/case.h"
+    target: "case.h"
+  - source: "template/case.h"
+    target: "case1.h"
+  - source: "template/case.h"
+    target: "case2.h"
+
+  # 題目特供檔案
+  - source: "template/VoyageLog.h"
+    target: "VoyageLog.h"

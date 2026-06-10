@@ -69,6 +69,15 @@ func RunAndJudgeWithSettings(operatorID string, workspace string, prob models.Pr
 	}
 	defer logFile.Close()
 
+	statusPriority := map[string]int{
+		"AC":  0,
+		"WA":  1,
+		"TLE": 2,
+		"RE":  3,
+		"CE":  4,
+		"SE":  5,
+	}
+
 	for i, preset := range settings.Presets {
 		fmt.Printf("[%s] === Preset %d (score=%d) ===\n", operatorID, i+1, preset.Score)
 		logFile.WriteString(fmt.Sprintf("\n=== Preset %d (score=%d) ===\n", i+1, preset.Score))
@@ -84,19 +93,19 @@ func RunAndJudgeWithSettings(operatorID string, workspace string, prob models.Pr
 			maxTime = result.PeakTime
 		}
 
-		// 更新整體狀態：如果有任一 preset 不是 AC，整體狀態為非 AC
-		if result.Status != "AC" && overallStatus == "AC" {
-			overallStatus = "WA" // 預設改為 WA，若有更嚴重的狀態再覆蓋
+		// 根據嚴重程度更新整體狀態
+		if statusPriority[result.Status] > statusPriority[overallStatus] {
+			overallStatus = result.Status
 		}
 
 		fmt.Printf("[%s] Preset %d 結果: %s (得分: %d/%d)\n", operatorID, i+1, result.Status, result.Earned, result.Score)
 	}
 
-	// 如果全部 AC，整體就是 AC；如果部分通過，用 Partial AC 或 WA 表示
+	// 如果全部 AC，整體就是 AC；如果部分通過但沒有更嚴重的錯誤，標記為 WA
 	if earnedScore == totalScore {
 		overallStatus = "AC"
-	} else if earnedScore > 0 {
-		overallStatus = "WA" // 部分通過也標記 WA
+	} else if earnedScore > 0 && overallStatus == "AC" {
+		overallStatus = "WA" 
 	}
 
 	fmt.Printf("[%s] 評測完成: 狀態=%s, 得分=%d/%d\n", operatorID, overallStatus, earnedScore, totalScore)
@@ -273,6 +282,7 @@ func runSinglePreset(operatorID string, workspace string, absProblemRoot string,
 		"--test-dir", "build",
 		"--output-on-failure",
 		"-V",
+		"--timeout", fmt.Sprintf("%v", float64(timeoutMs)/1000.0),
 	)
 
 	var stdoutBuf bytes.Buffer
@@ -295,9 +305,8 @@ func runSinglePreset(operatorID string, workspace string, absProblemRoot string,
 
 	// 8. 檢查 Runtime Error
 	if runErr != nil {
-		if strings.Contains(outputStr, "Timeout") ||
-			strings.Contains(outputStr, "TIMEOUT") ||
-			strings.Contains(outputStr, "Test timeout") {
+		// ctest 在 timeout 時通常會印出 "***Timeout"
+		if strings.Contains(outputStr, "***Timeout") {
 			result.Status = "TLE"
 			return result
 		}
@@ -306,6 +315,17 @@ func runSinglePreset(operatorID string, workspace string, absProblemRoot string,
 			result.Status = "RE"
 			return result
 		}
+
+		// Fallback for TLE if we didn't catch it as RE and it mentions timeout (excluding the startup log)
+		lowerOutput := strings.ToLower(outputStr)
+		if strings.Count(lowerOutput, "timeout") > 1 || (strings.Contains(lowerOutput, "timeout") && !strings.Contains(lowerOutput, "test timeout computed to be")) {
+			result.Status = "TLE"
+			return result
+		}
+		
+		// 若無法明確辨識，先視為 RE
+		result.Status = "RE"
+		return result
 	}
 
 	// 9. 比對輸出與 expected

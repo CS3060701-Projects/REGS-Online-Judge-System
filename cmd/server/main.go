@@ -22,7 +22,7 @@ import (
 // @description This is the API server for the REGS Online Judge system.
 // @host localhost:8081
 // @BasePath /api
-// @securityDefinitions.apikey ApiKeyAuth
+// @securityDefinitions.apikey Bearer
 // @in header
 // @name Authorization
 func main() {
@@ -98,7 +98,6 @@ func main() {
 			{
 				admin.PUT("/problems", handlers.CreateProblem)
 				admin.GET("/problems/:id/testcases", handlers.DownloadTestCases)
-				admin.POST("/problems/:id/testdata", handlers.UploadTestData)
 				admin.DELETE("/problems/:id", handlers.DeleteProblem)
 			}
 		}

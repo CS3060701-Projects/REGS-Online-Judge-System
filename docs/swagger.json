@@ -3,15 +3,7 @@
     "info": {
         "description": "This is the API server for the REGS Online Judge system.",
         "title": "REGS Online Judge API",
-        "termsOfService": "http://swagger.io/terms/",
-        "contact": {
-            "name": "API Support",
-            "url": "https://github.com/your-repo"
-        },
-        "license": {
-            "name": "MIT",
-            "url": "https://opensource.org/licenses/MIT"
-        },
+        "contact": {},
         "version": "1.0"
     },
     "host": "localhost:8081",
@@ -83,12 +75,12 @@
             "put": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
-                "description": "(Admin only) Creates a new problem. If a problem with the same ID exists and was soft-deleted, it will be restored and updated. If it exists and is active, it will return a conflict error.",
+                "description": "(Admin only) Creates or restores a problem and uploads its test data in a single request using multipart/form-data.\ntime_limit and memory_limit are read automatically from settings.yaml inside the zip (limits.totalTime / limits.memory).",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -96,16 +88,40 @@
                 "tags": [
                     "Admin"
                 ],
-                "summary": "Create or update a problem",
+                "summary": "Create or update a problem (with test data)",
                 "parameters": [
                     {
-                        "description": "Problem data",
-                        "name": "problem",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.Problem"
-                        }
+                        "type": "string",
+                        "description": "Problem ID",
+                        "name": "id",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Problem title",
+                        "name": "title",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Problem description (Markdown)",
+                        "name": "description",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Whether the problem is publicly visible (default true)",
+                        "name": "is_visible",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "Test cases as a .zip file (must contain settings.yaml)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -118,6 +134,28 @@
                                     "$ref": "#/definitions/models.Problem"
                                 },
                                 "message": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
                                     "type": "string"
                                 }
                             }
@@ -173,7 +211,7 @@
             "delete": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "(Admin only) Soft-deletes a problem from the database and removes its associated test data files.",
@@ -197,7 +235,7 @@
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "(Admin only) Downloads all test cases for a problem as a single .zip file.",
@@ -214,43 +252,6 @@
                         "description": "Problem ID",
                         "name": "id",
                         "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {}
-            }
-        },
-        "/problems/{id}/testdata": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "(Admin only) Uploads a .zip file containing test data (e.g., *.in, *.out files). This will replace any existing test data for the problem.",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin"
-                ],
-                "summary": "Upload test data for a problem",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Problem ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "file",
-                        "description": "Test cases as a .zip file",
-                        "name": "file",
-                        "in": "formData",
                         "required": true
                     }
                 ],
@@ -319,7 +320,7 @@
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Retrieves a list of all submissions made by the currently authenticated user.",
@@ -367,7 +368,7 @@
             "post": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Upload a .zip file containing source code for a specific problem.",
@@ -444,7 +445,7 @@
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Retrieves the current status and result of a specific submission.",
@@ -506,7 +507,7 @@
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Downloads a specific log file (configure, compile, or output) for a submission.",
@@ -570,11 +571,78 @@
                 }
             }
         },
+        "/submissions/{operatorId}/rerun": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Re-queues an existing submission for judging in the background.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Submissions"
+                ],
+                "summary": "Re-run a submission job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Operator ID of the submission",
+                        "name": "operatorId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                " operatorId": {
+                                    "type": "string"
+                                },
+                                " status": {
+                                    "type": "string"
+                                },
+                                "message": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "權限不足",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "找不到提交紀錄",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/submissions/{operatorId}/source": {
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Downloads the original .zip file for a submission. Only accessible by the owner or an admin.",
@@ -686,7 +754,7 @@
             "post": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Invalidates the current user's JWT by adding it to a blacklist.",
@@ -746,7 +814,7 @@
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "Bearer": []
                     }
                 ],
                 "description": "Retrieves the profile information of the currently authenticated user.",
@@ -1009,9 +1077,17 @@
                 "run_time": {
                     "type": "integer"
                 },
+                "score": {
+                    "description": "實際得分",
+                    "type": "integer"
+                },
                 "status": {
                     "description": "Pending, AC, WA, CE, SE, RE, TLE",
                     "type": "string"
+                },
+                "total_score": {
+                    "description": "該題滿分",
+                    "type": "integer"
                 },
                 "updatedAt": {
                     "type": "string"
@@ -1046,7 +1122,7 @@
         }
     },
     "securityDefinitions": {
-        "ApiKeyAuth": {
+        "Bearer": {
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"

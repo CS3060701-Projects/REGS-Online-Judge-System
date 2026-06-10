@@ -148,17 +148,61 @@ paths:
           description: OK
     put:
       tags: [Admin]
-      summary: 建立或更新題目
+      summary: 建立或更新題目（含測資）
+      description: |
+        (Admin only) 使用 multipart/form-data 一次完成建立題目與上傳測資。
+        若題目 ID 已存在（含軟刪除），則更新並還原；否則新建。
+        time_limit 與 memory_limit 會自動從 zip 內的 settings.yaml 讀取（limits.totalTime / limits.memory）。
       security: [{BearerAuth: []}]
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Problem'
+              type: object
+              required: [id, title, file]
+              properties:
+                id:
+                  type: string
+                  description: 題目 ID
+                title:
+                  type: string
+                  description: 題目標題
+                description:
+                  type: string
+                  description: 題目描述（Markdown）
+                is_visible:
+                  type: boolean
+                  description: 是否公開（預設 true）
+                  default: true
+                file:
+                  type: string
+                  format: binary
+                  description: 測資壓縮檔（.zip），需包含 settings.yaml
       responses:
         '200':
-          description: 題目已建立或更新
+          description: 題目建立/更新成功，測資已上傳
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  problem:
+                    $ref: '#/components/schemas/Problem'
+        '400':
+          description: 缺少必要欄位或 zip 檔案
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: 伺服器內部錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /problems/{problem_id}:
     get:
       tags: [Problems]
@@ -204,30 +248,7 @@ paths:
               schema:
                 type: string
                 format: binary
-  /problems/{problem_id}/testdata:
-    post:
-      tags: [Admin]
-      summary: 上傳題目測資
-      security: [{BearerAuth: []}]
-      parameters:
-        - name: problem_id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-      responses:
-        '200':
-          description: 上傳成功
+
   /submissions:
     post:
       tags: [Submissions]

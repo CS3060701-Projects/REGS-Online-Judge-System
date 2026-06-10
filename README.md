@@ -34,7 +34,7 @@
 
 本專案提供跨平台統一腳本，無論是 **Windows** 或 **Ubuntu** 皆可直接執行，不需設定任何執行權限。
 
-- **啟動伺服器** (自動開啟 DB 並編譯)
+- **啟動伺服器** (包含：自動開啟 DB、建置 `regs-judger` 映像檔、自動產生 JWT 金鑰、編譯並執行伺服器)
   ```bash
   go run cmd/task/main.go server
   ```
@@ -88,7 +88,13 @@ openssl pkey -in private.pem -pubout -out public.pem
 2. GET `/api/problems/{id}/testcases` 下載測資
 3. DELETE `/api/problems/{id}` 刪除題目
 
-題目測資預設放在 `testdata/{problem_id}/`，需包含根目錄 `CMakeLists.txt` 與 `solution/`、`spec/` 等結構。
+### 題目測資 ZIP 格式規範
+
+上傳題目的 `.zip` 壓縮檔時，系統會自動解壓縮至 `testdata/{problem_id}/`。為確保評測正常執行，ZIP 檔**必須**包含以下項目：
+
+1. **`CMakeLists.txt`** (絕對強制)：定義專案編譯規則。若缺失，系統會在評測前直接中斷並判為 `SE` (System Error)。
+2. **`settings.yaml`** (強烈建議)：用以定義時間/記憶體限制、各測資給分比重與比對設定。若缺失，系統將使用預設測試邏輯。
+3. **參照檔案**：任何在 `settings.yaml` 內被 `expected` (預期輸出檔) 或 `replace` (官方覆寫檔) 參照到的實體檔案 (例如 `spec/` 或 `online-judge/` 內的檔案)，都必須一併打包。
 
 5. **API文件**
 

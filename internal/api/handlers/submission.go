@@ -204,13 +204,20 @@ func processSubmission(operatorID, workspace, problemID string) {
 			return
 		}
 
+		configureLogPath := filepath.Join(workspace, "configure.log")
+		if err := judge.RunConfigure(absWorkspace, absProblemRoot, configureLogPath); err != nil {
+			updateSubmissionStatus(operatorID, "SE")
+			fmt.Printf("[%s] 配置失敗，請檢查 configure.log. Error: %v\n", operatorID, err)
+			return
+		}
+		mirrorConfigLog(workspace)
+
 		compileLogPath := filepath.Join(workspace, "compile.log")
-		if err := judge.RunCompile(absWorkspace, absProblemRoot, compileLogPath); err != nil {
+		if err := judge.RunBuild(absWorkspace, absProblemRoot, compileLogPath); err != nil {
 			updateSubmissionStatus(operatorID, "CE")
 			fmt.Printf("[%s] 編譯失敗，請檢查 compile.log. Error: %v\n", operatorID, err)
 			return
 		}
-		mirrorConfigLog(workspace)
 
 		updateSubmissionStatus(operatorID, "Judging")
 
